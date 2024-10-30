@@ -112,6 +112,10 @@ const getSingle = asyncErrorHandler(async (req, res) => {
     throw new ErrorResponse("No Payment Found", 404);
   }
 });
+const deletePaymentAll = asyncErrorHandler(async (req, res) => {
+  await paymentModel.deleteMany({});
+  res.status(statusCode.accepted).json({ message: "All Payments Deleted" });
+});
 const getByBookingId = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
   let daypass = await paymentModel.find({ ref: id });
@@ -357,4 +361,5 @@ module.exports = {
   confirm,
   cancel,
   updatePayment,
+  deletePaymentAll,
 };
