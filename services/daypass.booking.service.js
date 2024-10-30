@@ -47,5 +47,14 @@ const getBookingByRef = asyncErrorHandler(async (req, res) => {
   }
   res.status(200).json(booking);
 });
+const deletAllBooking = asyncErrorHandler(async (req, res) => {
+  await daypassBooking.deleteMany({});
+  res.status(200).json({ message: "All booking deleted" });
+});
 
-module.exports = { createBooking, getAllBooking, getBookingByRef };
+module.exports = {
+  createBooking,
+  getAllBooking,
+  getBookingByRef,
+  deletAllBooking,
+};

@@ -34,6 +34,7 @@ const seasonalRoute = require("./seasonal.router");
 const taskRoute = require("./task.router");
 const mainRoomRoute = require("./mainRoom.router");
 const peakOffPriceRoute = require("./settings.router");
+const blockedRoomRoute = require("./blockedRoom.router");
 
 allRoutes.use("/admin", accountRoute);
 allRoutes.use("/guest", guestRoute);
@@ -71,5 +72,6 @@ allRoutes.use("/seasonal", seasonalRoute);
 allRoutes.use("/task", taskRoute);
 allRoutes.use("/main/rooms", mainRoomRoute);
 allRoutes.use("/peak", peakOffPriceRoute);
+allRoutes.use("/blocked/room", blockedRoomRoute);
 
 module.exports = { allRoutes };
