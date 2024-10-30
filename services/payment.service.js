@@ -63,33 +63,33 @@ const create = asyncErrorHandler(async (req, res) => {
       vat: formatPrice(req.body.vat),
       totalCost: formatPrice(req.body.totalCost),
     };
-    if (req.body.status === "Pending") {
-      sendEmail(
-        guestDetails.email,
-        "Your Booking Is Pending",
-        "pending_payment",
-        emailContext
-      );
-      sendEmail(
-        "bookings@jarabeachresort.com",
-        "New Booking Pending",
-        "pending_payment",
-        emailContext
-      );
-    } else if (req.body.status === "Success") {
-      sendEmail(
-        guestDetails.email,
-        "Your Booking Is Confirmed",
-        "confirmation",
-        emailContext
-      );
-      sendEmail(
-        "bookings@jarabeachresort.com",
-        "New Booking Confirmed",
-        "confirmation",
-        emailContext
-      );
-    }
+    // if (req.body.status === "Pending") {
+    //   sendEmail(
+    //     guestDetails.email,
+    //     "Your Booking Is Pending",
+    //     "pending_payment",
+    //     emailContext
+    //   );
+    //   sendEmail(
+    //     "bookings@jarabeachresort.com",
+    //     "New Booking Pending",
+    //     "pending_payment",
+    //     emailContext
+    //   );
+    // } else if (req.body.status === "Success") {
+    //   sendEmail(
+    //     guestDetails.email,
+    //     "Your Booking Is Confirmed",
+    //     "confirmation",
+    //     emailContext
+    //   );
+    //   sendEmail(
+    //     "bookings@jarabeachresort.com",
+    //     "New Booking Confirmed",
+    //     "confirmation",
+    //     emailContext
+    //   );
+    // }
   } else {
     throw new ErrorResponse("Failed To Create Payment", 404);
   }
@@ -173,18 +173,18 @@ const confirm = asyncErrorHandler(async (req, res) => {
       vat: formatPrice(payment.vat),
       totalCost: formatPrice(payment.totalCost),
     };
-    sendEmail(
-      guestDetails.email,
-      "Your Booking Is Confirmed",
-      "confirmation",
-      emailContext
-    );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "New Booking Confirmed",
-      "confirmation",
-      emailContext
-    );
+    // sendEmail(
+    //   guestDetails.email,
+    //   "Your Booking Is Confirmed",
+    //   "confirmation",
+    //   emailContext
+    // );
+    // sendEmail(
+    //   "bookings@jarabeachresort.com",
+    //   "New Booking Confirmed",
+    //   "confirmation",
+    //   emailContext
+    // );
   } else {
     throw new ErrorResponse("Payment Not Found", 404);
   }
@@ -245,18 +245,18 @@ const cancel = asyncErrorHandler(async (req, res) => {
       vat: formatPrice(payment.vat),
       totalCost: formatPrice(payment.totalCost),
     };
-    sendEmail(
-      guestDetails.email,
-      "Your Booking Has Been Cancelled",
-      "cancellation",
-      emailContext
-    );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Cancelled",
-      "cancellation",
-      emailContext
-    );
+    // sendEmail(
+    //   guestDetails.email,
+    //   "Your Booking Has Been Cancelled",
+    //   "cancellation",
+    //   emailContext
+    // );
+    // sendEmail(
+    //   "bookings@jarabeachresort.com",
+    //   "Booking Cancelled",
+    //   "cancellation",
+    //   emailContext
+    // );
   } else {
     throw new ErrorResponse("Booking Not Found", 404);
   }
@@ -321,33 +321,33 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
           ).toLocaleString()
         : 0,
   };
-  if (req.body.status === "Pending") {
-    sendEmail(
-      guestDetails.email,
-      "Your Booking Is Updated",
-      "manage_pending",
-      emailContext
-    );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Updated",
-      "manage_pending",
-      emailContext
-    );
-  } else if (req.body.status === "Success") {
-    sendEmail(
-      guestDetails.email,
-      "Your Booking Is Updated",
-      "manage_success",
-      emailContext
-    );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Updated",
-      "manage_success",
-      emailContext
-    );
-  }
+  // if (req.body.status === "Pending") {
+  //   sendEmail(
+  //     guestDetails.email,
+  //     "Your Booking Is Updated",
+  //     "manage_pending",
+  //     emailContext
+  //   );
+  //   sendEmail(
+  //     "bookings@jarabeachresort.com",
+  //     "Booking Updated",
+  //     "manage_pending",
+  //     emailContext
+  //   );
+  // } else if (req.body.status === "Success") {
+  //   sendEmail(
+  //     guestDetails.email,
+  //     "Your Booking Is Updated",
+  //     "manage_success",
+  //     emailContext
+  //   );
+  //   sendEmail(
+  //     "bookings@jarabeachresort.com",
+  //     "Booking Updated",
+  //     "manage_success",
+  //     emailContext
+  //   );
+  // }
 });
 module.exports = {
   create,

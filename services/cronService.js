@@ -74,18 +74,18 @@ cron.schedule("* * * * *", async () => {
           vat: formatPrice(payment.vat),
           totalCost: formatPrice(payment.totalCost),
         };
-        sendEmail(
-          guestDetails.email,
-          "Your Booking has been Cancelled",
-          "cancellation",
-          emailContext
-        );
-        sendEmail(
-          "bookings@jarabeachresort.com",
-          "Booking Cancelled",
-          "cancellation",
-          emailContext
-        );
+        // sendEmail(
+        //   guestDetails.email,
+        //   "Your Booking has been Cancelled",
+        //   "cancellation",
+        //   emailContext
+        // );
+        // sendEmail(
+        //   "bookings@jarabeachresort.com",
+        //   "Booking Cancelled",
+        //   "cancellation",
+        //   emailContext
+        // );
       } catch (err) {
         console.log("failed to cancel");
       }
