@@ -25,7 +25,7 @@ const createBlockedRoom = asyncErrorHandler(async (req, res) => {
   if (newSeasonalDate) {
     res.status(201).json(newSeasonalDate);
   } else {
-    throw new ErrorResponse("No Blocked Room found", 404);
+    throw new ErrorResponse("Can't create blocked room", 404);
   }
 });
 
