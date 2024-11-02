@@ -116,6 +116,17 @@ const deletePaymentAll = asyncErrorHandler(async (req, res) => {
   await paymentModel.deleteMany({});
   res.status(statusCode.accepted).json({ message: "All Payments Deleted" });
 });
+
+const deletByBookingId = asyncErrorHandler(async (req, res) => {
+  const { id } = req.params;
+  let daypass = await paymentModel.findOneAndDelete({ ref: id });
+  if (daypass) {
+    res.status(statusCode.accepted).json({ message: "Payment Deleted" });
+  } else {
+    throw new ErrorResponse("No Payment Found", 404);
+  }
+});
+
 const getByBookingId = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
   let daypass = await paymentModel.find({ ref: id });
@@ -362,4 +373,5 @@ module.exports = {
   cancel,
   updatePayment,
   deletePaymentAll,
+  deletByBookingId,
 };
