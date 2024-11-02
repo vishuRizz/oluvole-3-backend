@@ -3,8 +3,8 @@ const {
   ErrorResponse,
   asyncErrorHandler,
 } = require("../middlewares/error/error");
-const shortid = require("shortid");
-
+// const shortid = require("shortid");
+// const { nanoid } = require("nanoid");
 const createBooking = asyncErrorHandler(async (req, res) => {
   let { guestCount, guestDetails, roomDetails } = req.body;
   guestDetails = JSON.parse(guestDetails);
@@ -17,11 +17,14 @@ const createBooking = asyncErrorHandler(async (req, res) => {
     ...guestDetails,
     photo: fileUrl,
   };
+
+  const { nanoid } = await import("nanoid");
+
   let create = await overnightBooking.create({
     totalGuest: guestCount,
     bookingDetails: roomDetails,
     guestDetails: updatedGuestDetails,
-    shortId: shortid.generate(), // Generate a short unique ID
+    shortId: nanoid(8).toUpperCase(), // Generate a short unique ID
   });
 
   res.status(200).json(create); // Send the booking with the short ID

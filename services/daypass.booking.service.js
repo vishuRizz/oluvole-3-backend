@@ -3,7 +3,8 @@ const {
   ErrorResponse,
   asyncErrorHandler,
 } = require("../middlewares/error/error");
-const shortid = require("shortid");
+// const shortid = require("shortid");
+// const { nanoid } = require("nanoid");
 
 const createBooking = asyncErrorHandler(async (req, res) => {
   let { guestCount, guestDetails, roomDetails } = req.body;
@@ -19,13 +20,14 @@ const createBooking = asyncErrorHandler(async (req, res) => {
   };
 
   // Generate a short ID
-  const shortId = shortid.generate(); // Generate a short unique ID
+  // const shortId = shortid.generate(); // Generate a short unique ID
+  const { nanoid } = await import("nanoid");
 
   let create = await daypassBooking.create({
     totalGuest: guestCount,
     bookingDetails: roomDetails,
     guestDetails: updatedGuestDetails,
-    shortId: shortId, // Store the short ID
+    shortId: nanoid(8).toUpperCase(), // Store the short ID
   });
 
   res.status(200).json(create); // Send the booking with the short ID
