@@ -102,7 +102,7 @@ const requestPasswordReset = asyncErrorHandler(async (req, res) => {
   user.resetPasswordExpiry = resetTokenExpiry;
   await user.save();
 
-  const resetUrl = `https://booking.jarabeachresort.com/new/admin/jara/reset-password/${resetToken}`;
+  const resetUrl = `https://booking.jarabeachresort.com/admin/jara/reset-password/${resetToken}`;
 
   try {
     sendEmail(user.email, "Password Reset Request", "resetPassword", {

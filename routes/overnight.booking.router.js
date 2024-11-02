@@ -4,6 +4,7 @@ const {
   getBookingByRef,
   updateBooking,
   deletAllBooking,
+  deleteBookingByRef,
 } = require("../services/overnight.booking.service");
 
 const router = require("express").Router();
@@ -14,5 +15,6 @@ router.get(`/get/all`, getAllBooking);
 router.get(`/get/:ref`, getBookingByRef);
 router.put(`/update/:ref`, upload.single("file"), updateBooking);
 router.delete(`/delete/all`, deletAllBooking);
+router.delete(`/delete/:ref`, deleteBookingByRef);
 
 module.exports = router;

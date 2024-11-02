@@ -52,6 +52,15 @@ const deletAllBooking = asyncErrorHandler(async (req, res) => {
   res.status(200).json({ message: "All booking deleted" });
 });
 
+const deleteBookingByRef = asyncErrorHandler(async (req, res) => {
+  const { ref } = req.params;
+  const booking = await overnightBooking.findOneAndDelete({ shortId: ref });
+  if (!booking) {
+    throw new ErrorResponse("Booking not found", 404);
+  }
+  res.status(200).json({ message: "Booking deleted" });
+});
+
 const updateBooking = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
   let { guestCount, guestDetails, roomDetails } = req.body;
@@ -86,4 +95,5 @@ module.exports = {
   getBookingByRef,
   updateBooking,
   deletAllBooking,
+  deleteBookingByRef,
 };
