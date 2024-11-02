@@ -14,6 +14,15 @@ const formatPrice = (price) => {
   const priceNumber = Number(price);
   return priceNumber.toLocaleString(); // Format the price with commas
 };
+const calculateNumberOfNights = (visitDate, endDate) => {
+  const visitDateObj = new Date(visitDate);
+  const endDateObj = new Date(endDate);
+  const numberOfNights = Math.floor(
+    (endDateObj - visitDateObj) / (1000 * 60 * 60 * 24)
+  );
+  console.log(numberOfNights);
+  return numberOfNights;
+};
 cron.schedule("* * * * *", async () => {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -58,11 +67,9 @@ cron.schedule("* * * * *", async () => {
             0
           } Children`,
           numberOfNights: roomDetails?.visitDate
-            ? Math.round(
-                (new Date(roomDetails?.endDate) -
-                  new Date(roomDetails?.visitDate)) /
-                  (1000 * 60 * 60 * 24) +
-                  1
+            ? calculateNumberOfNights(
+                roomDetails?.visitDate,
+                roomDetails?.endDate
               )
             : "Day Pass",
           subTotal: formatPrice(payment.subTotal),
