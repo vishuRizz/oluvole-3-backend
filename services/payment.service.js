@@ -17,6 +17,16 @@ const formatPrice = (price) => {
   const priceNumber = Number(price);
   return priceNumber.toLocaleString(); // Format the price with commas
 };
+
+const calculateNumberOfNights = (visitDate, endDate) => {
+  const visitDateObj = new Date(visitDate);
+  const endDateObj = new Date(endDate);
+  const numberOfNights = Math.floor(
+    (endDateObj - visitDateObj) / (1000 * 60 * 60 * 24)
+  );
+  console.log(numberOfNights);
+  return numberOfNights;
+};
 const create = asyncErrorHandler(async (req, res) => {
   const guestDetails = JSON.parse(req.body.guestDetails);
   const roomDetails = JSON.parse(req.body.roomDetails);
@@ -47,12 +57,7 @@ const create = asyncErrorHandler(async (req, res) => {
         0
       } Children`,
       numberOfNights: roomDetails?.visitDate
-        ? Math.round(
-            (new Date(roomDetails?.endDate) -
-              new Date(roomDetails?.visitDate)) /
-              (1000 * 60 * 60 * 24) +
-              1
-          )
+        ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
         : "Day Pass",
       subTotal: formatPrice(req.body.subTotal),
       multiNightDiscount: req.body.discount.toLocaleString(),
@@ -172,12 +177,7 @@ const confirm = asyncErrorHandler(async (req, res) => {
         0
       } Children`,
       numberOfNights: roomDetails?.visitDate
-        ? Math.round(
-            (new Date(roomDetails?.endDate) -
-              new Date(roomDetails?.visitDate)) /
-              (1000 * 60 * 60 * 24) +
-              1
-          )
+        ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
         : "Day Pass",
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
@@ -244,12 +244,7 @@ const cancel = asyncErrorHandler(async (req, res) => {
         0
       } Children`,
       numberOfNights: roomDetails?.visitDate
-        ? Math.round(
-            (new Date(roomDetails?.endDate) -
-              new Date(roomDetails?.visitDate)) /
-              (1000 * 60 * 60 * 24) +
-              1
-          )
+        ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
         : "Day Pass",
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
@@ -312,11 +307,7 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       0
     } Children`,
     numberOfNights: roomDetails?.visitDate
-      ? Math.round(
-          (new Date(roomDetails?.endDate) - new Date(roomDetails?.visitDate)) /
-            (1000 * 60 * 60 * 24) +
-            1
-        )
+      ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
       : "Day Pass",
     subTotal: formatPrice(payment.subTotal),
     multiNightDiscount: payment.discount.toLocaleString(),
