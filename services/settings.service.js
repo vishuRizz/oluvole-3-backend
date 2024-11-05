@@ -1,33 +1,43 @@
-const { PeackOffPriceSchema } = require("../models/settings.schema"); // Assuming you have a settings schema
+const { PeakOffPriceSchema } = require("../models/settings.schema");
 
-const createPeackOffPriceSetting = async (req, res) => {
-  const { isEnabled, percentage } = req.body;
-  const peak = new PeackOffPriceSchema({ isEnabled, percentage });
+const createPeakOffPriceSetting = async (req, res) => {
+  const { isEnabled, dateRanges } = req.body;
+  const peak = new PeakOffPriceSchema({ isEnabled, dateRanges });
   await peak.save();
-  if (peak) {
-    res.status(201).json(peak);
-  } else {
-    throw new ErrorResponse("No seasonal dates found", 404);
-  }
+  res.status(201).json(peak);
 };
 
 const getPeakOffPriceSetting = async (req, res) => {
-  const setting = await PeackOffPriceSchema.findOne(); // Fetch the PeackOffPriceSchema
+  const setting = await PeakOffPriceSchema.findOne();
   res.status(200).json(setting);
 };
 
 const setPeakOffPriceSetting = async (req, res) => {
-  const { isEnabled, percentage } = req.body;
-  await PeackOffPriceSchema.findOneAndUpdate(
+  const { isEnabled, dateRanges } = req.body;
+  await PeakOffPriceSchema.findOneAndUpdate(
     {},
-    { isEnabled, percentage },
+    { isEnabled, dateRanges },
     { upsert: true }
-  ); // Upsert the PeackOffPriceSchema
-  res.status(200).json({ message: "PeackOffPriceSchema updated successfully" });
+  );
+  res.status(200).json({ message: "PeakOffPriceSchema updated successfully" });
+};
+
+const deleteDateRange = async (req, res) => {
+  const { index } = req.params;
+  const setting = await PeakOffPriceSchema.findOne();
+
+  if (setting) {
+    setting.dateRanges.splice(index, 1);
+    await setting.save();
+    res.status(200).json({ message: "Date range deleted successfully" });
+  } else {
+    res.status(404).json({ message: "Setting not found" });
+  }
 };
 
 module.exports = {
   getPeakOffPriceSetting,
   setPeakOffPriceSetting,
-  createPeackOffPriceSetting,
+  createPeakOffPriceSetting,
+  deleteDateRange,
 };

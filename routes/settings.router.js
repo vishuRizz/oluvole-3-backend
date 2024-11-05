@@ -2,12 +2,14 @@ const express = require("express");
 const {
   getPeakOffPriceSetting,
   setPeakOffPriceSetting,
-  createPeackOffPriceSetting,
+  createPeakOffPriceSetting,
+  deleteDateRange,
 } = require("../services/settings.service");
 const router = express.Router();
 
-router.post("/create", createPeackOffPriceSetting);
+router.post("/create", createPeakOffPriceSetting);
 router.get("/peak-off-price", getPeakOffPriceSetting);
 router.post("/peak-off-price", setPeakOffPriceSetting);
+router.delete("/peak-off-price/:index", deleteDateRange);
 
 module.exports = router;
