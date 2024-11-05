@@ -9,6 +9,7 @@ const paymentSchema = mongoose.Schema(
     method: { type: String },
     guestDetails: { type: String },
     roomDetails: { type: String },
+    bookingInfo: { type: String, required: false },
     subTotal: { type: String },
     vat: { type: String },
     totalCost: { type: String },

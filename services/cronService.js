@@ -23,6 +23,26 @@ const calculateNumberOfNights = (visitDate, endDate) => {
   console.log(numberOfNights);
   return numberOfNights;
 };
+
+const counting = (guestCount) => {
+  const numChildren = guestCount?.ages?.filter((age) =>
+    age.includes("child")
+  ).length;
+  const numToddlers = guestCount?.ages?.filter((age) =>
+    age.includes("toddler")
+  ).length;
+  const numInfants = guestCount?.ages?.filter((age) =>
+    age.includes("infant")
+  ).length;
+
+  return {
+    adults: guestCount?.adults,
+    children: numChildren,
+    toddlers: numToddlers,
+    infants: numInfants,
+  };
+};
+
 cron.schedule("* * * * *", async () => {
   try {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -35,6 +55,9 @@ cron.schedule("* * * * *", async () => {
       try {
         const guestDetails = JSON.parse(payment.guestDetails);
         const roomDetails = JSON.parse(payment.roomDetails);
+        const bookingInfo = payment.bookingInfo
+          ? JSON.parse(payment.bookingInfo)
+          : null;
         if (roomDetails.selectedRooms) {
           for (const room of roomDetails.selectedRooms) {
             await SubRooms.findByIdAndUpdate(room.id, {
@@ -57,21 +80,36 @@ cron.schedule("* * * * *", async () => {
           checkOut: roomDetails?.endDate
             ? formatDate(roomDetails?.endDate)
             : roomDetails?.startDate,
-          numberOfGuests: `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ??
-            roomDetails?.adultsCount ??
-            0
-          } Adults, ${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.children ??
-            roomDetails?.childrenCount ??
-            0
-          } Children`,
+          numberOfGuests: roomDetails?.visitDate
+            ? `${
+                roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+              } Adults, ${
+                counting(roomDetails?.selectedRooms?.[0]?.guestCount)
+                  .children ?? 0
+              } Children ${
+                counting(roomDetails?.selectedRooms?.[0]?.guestCount)
+                  .toddlers ?? 0
+              } Toddlers ${
+                counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ??
+                0
+              } Infants`
+            : bookingInfo
+            ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+            : `${roomDetails?.adultsCount ?? 0} Adults, ${
+                roomDetails?.childrenCount ?? 0
+              } Children`,
           numberOfNights: roomDetails?.visitDate
             ? calculateNumberOfNights(
                 roomDetails?.visitDate,
                 roomDetails?.endDate
               )
             : "Day Pass",
+          extras:
+            roomDetails?.visitDate && roomDetails?.finalData
+              ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
+              : roomDetails?.startDate && roomDetails?.extras
+              ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+              : "No Extras",
           subTotal: formatPrice(payment.subTotal),
           multiNightDiscount: payment.discount.toLocaleString(),
           clubMemberDiscount: payment.voucher,

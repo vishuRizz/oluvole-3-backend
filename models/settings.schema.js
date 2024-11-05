@@ -1,12 +1,18 @@
 const mongoose = require("mongoose");
 
-const PeackOffPriceSchemaSchema = new mongoose.Schema({
-  isEnabled: { type: Boolean, default: false },
-  percentage: { type: Number, default: 0 },
+const DateRangeSchema = new mongoose.Schema({
+  startDate: { type: Date, required: true },
+  endDate: { type: Date, required: true },
+  percentage: { type: Number, min: -500, max: 500, required: true },
 });
 
-const PeackOffPriceSchema = mongoose.model(
-  "PeackOffPriceSchema",
-  PeackOffPriceSchemaSchema
+const PeakOffPriceSchemaSchema = new mongoose.Schema({
+  isEnabled: { type: Boolean, default: false },
+  dateRanges: [DateRangeSchema],
+});
+
+const PeakOffPriceSchema = mongoose.model(
+  "PeakOffPriceSchema",
+  PeakOffPriceSchemaSchema
 );
-module.exports = { PeackOffPriceSchema };
+module.exports = { PeakOffPriceSchema };
