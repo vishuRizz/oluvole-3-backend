@@ -67,7 +67,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
     const endDate2 = new Date(bookingItem.bookingDetails.endDate);
 
-    if (visitDate2 <= endingDate && endDate2 >= startingDate) {
+    if (visitDate2 <= endingDate && endDate2 > startingDate) {
       bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
         let quantity = selectedRoom.quantity;
         const roomIndex = allRooms.findIndex((room) => {
