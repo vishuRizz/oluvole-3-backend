@@ -66,8 +66,8 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
 
     const endDate2 = new Date(bookingItem.bookingDetails.endDate);
-    console.log(bookingItem.bookingDetails);
-    console.log(allRooms);
+    // console.log(bookingItem.bookingDetails);
+    // console.log(allRooms);
     if (visitDate2 <= endingDate && endDate2 > startingDate) {
       bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
         let quantity = selectedRoom.quantity;
