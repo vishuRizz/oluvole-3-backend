@@ -61,7 +61,7 @@ cron.schedule("* * * * *", async () => {
         if (roomDetails.selectedRooms) {
           for (const room of roomDetails.selectedRooms) {
             await SubRooms.findByIdAndUpdate(room.id, {
-              $inc: { availableRoom: room.quantity },
+              $inc: { totalRoom: room.quantity },
             });
           }
         }
