@@ -66,7 +66,8 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
 
     const endDate2 = new Date(bookingItem.bookingDetails.endDate);
-
+    console.log(bookingItem.bookingDetails);
+    console.log(allRooms);
     if (visitDate2 <= endingDate && endDate2 > startingDate) {
       bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
         let quantity = selectedRoom.quantity;
@@ -75,12 +76,13 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
         });
         console.log(roomIndex);
         if (roomIndex !== -1) {
-          allRooms[roomIndex].availableRoom -= quantity;
+          // allRooms[roomIndex].availableRoom -= quantity;
+          allRooms[roomIndex].totalRoom -= quantity;
         }
       });
     }
   });
-  const availableRooms = allRooms.filter((room) => room.availableRoom > 0);
+  const availableRooms = allRooms.filter((room) => room.totalRoom > 0);
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
