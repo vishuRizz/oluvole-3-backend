@@ -1,6 +1,7 @@
 const { asyncErrorHandler } = require("../middlewares/error/error");
 const { overnightBooking } = require("../models/overnight.booking.schema");
 const { RoomTypes, SubRooms } = require("../models/rooms.schema");
+const { paymentModel } = require("../models");
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -50,38 +51,49 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       .status(400)
       .json({ error: "visitDate and endDate are required" });
   }
-  const booking = await overnightBooking.find({});
+
+  // Fetch all bookings
+  const bookings = await overnightBooking.find({});
   let allRooms = await SubRooms.find({}).populate("roomId");
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
-  booking.forEach((bookingItem) => {
+  for (const bookingItem of bookings) {
     if (!bookingItem.bookingDetails) {
       console.log(
         "booking details not found for booking with id ",
         bookingItem._id
       );
-      return;
+      continue; // Skip to the next booking
     }
-    const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
 
+    const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
     const endDate2 = new Date(bookingItem.bookingDetails.endDate);
-    // console.log(bookingItem.bookingDetails);
-    // console.log(allRooms);
+
+    // Check if the booking dates overlap with the requested dates
     if (visitDate2 <= endingDate && endDate2 > startingDate) {
-      bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
-        let quantity = selectedRoom.quantity;
-        const roomIndex = allRooms.findIndex((room) => {
-          return room?._id?.toString() === selectedRoom?.id?.toString();
+      // Fetch the corresponding payment for the booking
+      const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
+
+      // Only decrement available rooms if the payment status is confirmed or pending
+      if (
+        payment &&
+        (payment.status === "Success" || payment.status === "Pending")
+      ) {
+        bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
+          let quantity = selectedRoom.quantity;
+          const roomIndex = allRooms.findIndex((room) => {
+            return room?._id?.toString() === selectedRoom?.id?.toString();
+          });
+          console.log(roomIndex);
+          if (roomIndex !== -1) {
+            allRooms[roomIndex].totalRoom -= quantity; // Decrement totalRoom
+          }
         });
-        console.log(roomIndex);
-        if (roomIndex !== -1) {
-          // allRooms[roomIndex].availableRoom -= quantity;
-          allRooms[roomIndex].totalRoom -= quantity;
-        }
-      });
+      }
     }
-  });
+  }
+
   const availableRooms = allRooms.filter((room) => room.totalRoom > 0);
   res.status(200).json(availableRooms);
 });
