@@ -71,7 +71,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     const endDate2 = new Date(bookingItem.bookingDetails.endDate);
 
     // Check if the booking dates overlap with the requested dates
-    if (visitDate2 <= endingDate && endDate2 > startingDate) {
+    if (visitDate2 < endingDate && endDate2 > startingDate) {
       // Fetch the corresponding payment for the booking
       const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
 
