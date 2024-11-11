@@ -58,10 +58,11 @@ cron.schedule("* * * * *", async () => {
         const bookingInfo = payment.bookingInfo
           ? JSON.parse(payment.bookingInfo)
           : null;
+
         if (roomDetails.selectedRooms) {
           for (const room of roomDetails.selectedRooms) {
             await SubRooms.findByIdAndUpdate(room.id, {
-              $inc: { totalRoom: room.quantity },
+              totalRoom: 1,
             });
           }
         }

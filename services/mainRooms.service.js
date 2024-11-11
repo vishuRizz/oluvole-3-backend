@@ -58,6 +58,9 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
+  // Create a set to track booked room IDs
+  const bookedRoomIds = new Set();
+
   for (const bookingItem of bookings) {
     if (!bookingItem.bookingDetails) {
       console.log(
@@ -75,26 +78,24 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       // Fetch the corresponding payment for the booking
       const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
 
-      // Only decrement available rooms if the payment status is confirmed or pending
+      // Only consider confirmed or pending payments
       if (
         payment &&
         (payment.status === "Success" || payment.status === "Pending")
       ) {
         bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
-          let quantity = selectedRoom.quantity;
-          const roomIndex = allRooms.findIndex((room) => {
-            return room?._id?.toString() === selectedRoom?.id?.toString();
-          });
-          console.log(roomIndex);
-          if (roomIndex !== -1) {
-            allRooms[roomIndex].totalRoom -= quantity; // Decrement totalRoom
-          }
+          const roomId = selectedRoom.id; // Get the room ID
+          bookedRoomIds.add(roomId); // Add the room ID to the set of booked rooms
         });
       }
     }
   }
 
-  const availableRooms = allRooms.filter((room) => room.totalRoom > 0);
+  // Filter out booked rooms from the available rooms
+  const availableRooms = allRooms.filter(
+    (room) => !bookedRoomIds.has(room._id.toString())
+  );
+
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
