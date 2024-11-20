@@ -1,32 +1,44 @@
-const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
+const {
+  asyncErrorHandler,
+  ErrorResponse,
+} = require("../middlewares/error/error");
 const { disableModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
 
+const createOrUpdate = asyncErrorHandler(async (req, res) => {
+  const { type, isDisabled } = req.body;
 
-const create = asyncErrorHandler(async (req, res) => {
-    let createDaypass = await disableModel.create(req.body)
-    if (createDaypass) {
-        res.status(statusCode.accepted).json(createDaypass)
-    }
-    else {
-        throw new ErrorResponse("Failed To Create Payment", 404)
-    }
-})
-
+  // Check if the entry already exists
+  const existingEntry = await disableModel.findOne({ type });
+  if (existingEntry) {
+    // Update the existing entry
+    existingEntry.isDisabled = isDisabled;
+    await existingEntry.save();
+    return res.status(statusCode.accepted).json(existingEntry);
+  } else {
+    // Create a new entry if it doesn't exist
+    const disableEntry = new disableModel({ type, isDisabled });
+    const createdEntry = await disableEntry.save();
+    return res.status(statusCode.accepted).json(createdEntry);
+  }
+});
 
 const getAll = asyncErrorHandler(async (req, res) => {
-    let allDaypass = await disableModel.find({})
-    if (allDaypass.length > 0) { res.status(statusCode.accepted).json(allDaypass) }
-    else { throw new ErrorResponse("No Massage Found", 404) }
-})
+  const allDisabledExtras = await disableModel.find({});
+  if (allDisabledExtras.length > 0) {
+    res.status(statusCode.accepted).json(allDisabledExtras);
+  } else {
+    throw new ErrorResponse("No Disabled Extras Found", 404);
+  }
+});
 
 const del = asyncErrorHandler(async (req, res) => {
-    let allDaypass = await disableModel.findByIdAndDelete(req.params.id)
-    if (allDaypass) { res.status(statusCode.accepted).json({ msg: "DELETED" }) }
-    else { throw new ErrorResponse("No Massage Found", 404) }
-})
+  const deletedEntry = await disableModel.findByIdAndDelete(req.params.id);
+  if (deletedEntry) {
+    res.status(statusCode.accepted).json({ msg: "DELETED" });
+  } else {
+    throw new ErrorResponse("No Disabled Entry Found", 404);
+  }
+});
 
-
-
-
-module.exports = { create, getAll, del }
+module.exports = { createOrUpdate, getAll, del };

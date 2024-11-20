@@ -1,10 +1,9 @@
-const {create,getAll, del} = require('../services/disable.service')
+const { createOrUpdate, getAll, del } = require("../services/disable.service");
 
-const router = require('express').Router()
+const router = require("express").Router();
 
+router.post("/create", createOrUpdate);
+router.get("/get", getAll);
+router.delete("/delete/:id", del);
 
-router.post("/create",create)
-router.get("/get",getAll)
-router.delete("/delete/:id",del)
-
-module.exports = router
+module.exports = router;
