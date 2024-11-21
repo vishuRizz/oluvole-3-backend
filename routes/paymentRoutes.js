@@ -26,6 +26,7 @@ router.get("/verify/:reference", async (req, res) => {
     console.log("verified");
     res.json(response);
   } catch (error) {
+    console.error("Payment verification error:", error);
     res.status(500).json(error);
   }
 });
