@@ -8,18 +8,20 @@ const { statusCode } = require("../utils/statusCode");
 const createOrUpdate = asyncErrorHandler(async (req, res) => {
   const { type, isDisabled } = req.body;
 
-  // Check if the entry already exists
-  const existingEntry = await disableModel.findOne({ type });
-  if (existingEntry) {
-    // Update the existing entry
-    existingEntry.isDisabled = isDisabled;
-    await existingEntry.save();
-    return res.status(statusCode.accepted).json(existingEntry);
-  } else {
-    // Create a new entry if it doesn't exist
-    const disableEntry = new disableModel({ type, isDisabled });
-    const createdEntry = await disableEntry.save();
-    return res.status(statusCode.accepted).json(createdEntry);
+  try {
+    const existingEntry = await disableModel.findOne({ type });
+    if (existingEntry) {
+      existingEntry.isDisabled = isDisabled;
+      await existingEntry.save();
+      return res.status(statusCode.accepted).json(existingEntry);
+    } else {
+      const disableEntry = new disableModel({ type, isDisabled });
+      const createdEntry = await disableEntry.save();
+      return res.status(statusCode.accepted).json(createdEntry);
+    }
+  } catch (error) {
+    console.error("Error in createOrUpdate:", error);
+    throw new ErrorResponse("Failed to create or update entry", 500);
   }
 });
 
