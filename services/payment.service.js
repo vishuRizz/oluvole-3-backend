@@ -64,11 +64,11 @@ const create = asyncErrorHandler(async (req, res) => {
         roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
         "Day Pass",
       checkIn: roomDetails?.visitDate
-        ? formatDate(roomDetails?.visitDate)
-        : roomDetails?.startDate,
+        ? `${formatDate(roomDetails?.visitDate)}, 2pm`
+        : `${roomDetails?.startDate}, 12noon`,
       checkOut: roomDetails?.endDate
-        ? formatDate(roomDetails?.endDate)
-        : roomDetails?.startDate,
+        ? `${formatDate(roomDetails?.endDate)}, 11am`
+        : `${roomDetails?.startDate}, 6pm`,
       numberOfGuests: roomDetails?.visitDate
         ? `${
             roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
