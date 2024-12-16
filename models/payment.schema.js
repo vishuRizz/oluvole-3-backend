@@ -18,6 +18,13 @@ const paymentSchema = mongoose.Schema(
     multiNightDiscount: { type: Number },
     previousCost: { type: Number, default: 0 },
     previousPaymentStatus: { type: String, default: "" },
+    roomsPrice: { type: String, default: "" },
+    extrasPrice: { type: String, default: "" },
+    roomsDiscount: { type: String, default: "" },
+    discountApplied: { type: String, default: "" },
+    voucherApplied: { type: String, default: "" },
+    priceAfterVoucher: { type: String, default: "" },
+    priceAfterDiscount: { type: String, default: "" },
   },
   { timestamps: true }
 );
