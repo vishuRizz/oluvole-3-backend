@@ -47,12 +47,22 @@ const counting = (guestCount) => {
 };
 
 const create = asyncErrorHandler(async (req, res) => {
+  // console.log(req.body);
   const guestDetails = JSON.parse(req.body.guestDetails);
   const roomDetails = JSON.parse(req.body.roomDetails);
   const bookingInfo = req.body.bookingInfo
     ? JSON.parse(req.body.bookingInfo)
     : null;
-
+  // const costBreakDown = JSON.parse(req.body.CostBreakDown);
+  const totalGuests = roomDetails?.visitDate
+    ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+    : bookingInfo?.adultsAlcoholic +
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
   let createDaypass = await paymentModel.create(req.body);
   if (createDaypass) {
     res.status(statusCode.accepted).json(createDaypass);
@@ -101,6 +111,32 @@ const create = asyncErrorHandler(async (req, res) => {
         : 0,
       vat: formatPrice(req.body.vat),
       totalCost: formatPrice(req.body.totalCost),
+      roomsPrice:
+        req.body.roomsPrice == "Daypass"
+          ? req.body.roomsPrice
+          : formatPrice(req.body.roomsPrice),
+      extrasPrice: formatPrice(req.body.extrasPrice),
+      roomsDiscount:
+        req.body.roomsDiscount == "Daypass"
+          ? req.body.roomsDiscount
+          : formatPrice(req.body.roomsDiscount),
+      discountApplied: req.body.discountApplied
+        ? req.body.discountApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      voucherApplied: req.body.voucherApplied
+        ? req.body.voucherApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      priceAfterVoucher: req.body.priceAfterVoucher
+        ? formatPrice(req.body.priceAfterVoucher)
+        : formatPrice(req.body.subTotal),
+      priceAfterDiscount: req.body.priceAfterDiscount
+        ? formatPrice(req.body.priceAfterDiscount)
+        : formatPrice(req.body.subTotal),
+      totalGuests: totalGuests,
     };
     if (req.body.status === "Pending") {
       sendEmail(
@@ -109,12 +145,12 @@ const create = asyncErrorHandler(async (req, res) => {
         "pending_payment",
         emailContext
       );
-      sendEmail(
-        "bookings@jarabeachresort.com",
-        "New Booking Pending",
-        "pending_payment",
-        emailContext
-      );
+      // sendEmail(
+      //   "bookings@jarabeachresort.com",
+      //   "New Booking Pending",
+      //   "pending_payment",
+      //   emailContext
+      // );
     } else if (req.body.status === "Success") {
       sendEmail(
         guestDetails.email,
@@ -190,6 +226,15 @@ const confirm = asyncErrorHandler(async (req, res) => {
     const bookingInfo = payment.bookingInfo
       ? JSON.parse(payment.bookingInfo)
       : null;
+    const totalGuests = roomDetails?.visitDate
+      ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      : bookingInfo?.adultsAlcoholic +
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
 
     const emailContext = {
       name: payment.name,
@@ -236,6 +281,34 @@ const confirm = asyncErrorHandler(async (req, res) => {
         : 0,
       vat: formatPrice(payment.vat),
       totalCost: formatPrice(payment.totalCost),
+      roomsPrice: payment.roomsPrice
+        ? payment.roomsPrice == "Daypass"
+          ? payment.roomsPrice
+          : formatPrice(payment.roomsPrice)
+        : "",
+      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
+      roomsDiscount: payment.roomsDiscount
+        ? payment.roomsDiscount == "Daypass"
+          ? payment.roomsDiscount
+          : formatPrice(payment.roomsDiscount)
+        : "",
+      discountApplied: payment.discountApplied
+        ? payment.discountApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      voucherApplied: payment.voucherApplied
+        ? payment.voucherApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      priceAfterVoucher: payment.priceAfterVoucher
+        ? formatPrice(payment.priceAfterVoucher)
+        : "",
+      priceAfterDiscount: payment.priceAfterDiscount
+        ? formatPrice(payment.priceAfterDiscount)
+        : "",
+      totalGuests: totalGuests,
     };
     sendEmail(
       guestDetails.email,
@@ -243,12 +316,12 @@ const confirm = asyncErrorHandler(async (req, res) => {
       "confirmation",
       emailContext
     );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "New Booking Confirmed",
-      "confirmation",
-      emailContext
-    );
+    // sendEmail(
+    //   "bookings@jarabeachresort.com",
+    //   "New Booking Confirmed",
+    //   "confirmation",
+    //   emailContext
+    // );
   } else {
     throw new ErrorResponse("Payment Not Found", 404);
   }
@@ -274,6 +347,16 @@ const cancel = asyncErrorHandler(async (req, res) => {
     const bookingInfo = payment.bookingInfo
       ? JSON.parse(payment.bookingInfo)
       : null;
+    const totalGuests = roomDetails?.visitDate
+      ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      : bookingInfo?.adultsAlcoholic +
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
+
     const emailContext = {
       name: payment.name,
       email: guestDetails.email,
@@ -319,6 +402,34 @@ const cancel = asyncErrorHandler(async (req, res) => {
         : 0,
       vat: formatPrice(payment.vat),
       totalCost: formatPrice(payment.totalCost),
+      roomsPrice: payment.roomsPrice
+        ? payment.roomsPrice == "Daypass"
+          ? payment.roomsPrice
+          : formatPrice(payment.roomsPrice)
+        : "",
+      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
+      roomsDiscount: payment.roomsDiscount
+        ? payment.roomsDiscount == "Daypass"
+          ? payment.roomsDiscount
+          : formatPrice(payment.roomsDiscount)
+        : "",
+      discountApplied: payment.discountApplied
+        ? payment.discountApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      voucherApplied: payment.voucherApplied
+        ? payment.voucherApplied == "true"
+          ? "Yes"
+          : "No"
+        : "",
+      priceAfterVoucher: payment.priceAfterVoucher
+        ? formatPrice(payment.priceAfterVoucher)
+        : "",
+      priceAfterDiscount: payment.priceAfterDiscount
+        ? formatPrice(payment.priceAfterDiscount)
+        : "",
+      totalGuests: totalGuests,
     };
     sendEmail(
       guestDetails.email,
@@ -326,12 +437,12 @@ const cancel = asyncErrorHandler(async (req, res) => {
       "cancellation",
       emailContext
     );
-    sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Cancelled",
-      "cancellation",
-      emailContext
-    );
+    // sendEmail(
+    //   "bookings@jarabeachresort.com",
+    //   "Booking Cancelled",
+    //   "cancellation",
+    //   emailContext
+    // );
   } else {
     throw new ErrorResponse("Booking Not Found", 404);
   }
@@ -353,6 +464,16 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
   const bookingInfo = payment.bookingInfo
     ? JSON.parse(payment.bookingInfo)
     : null;
+  const totalGuests = roomDetails?.visitDate
+    ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+    : bookingInfo?.adultsAlcoholic +
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
+
   const emailContext = {
     name: payment.name,
     email: guestDetails.email,
@@ -404,6 +525,34 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
             parseFloat(payment.totalCost) - parseFloat(payment.previousCost)
           ).toLocaleString()
         : 0,
+    roomsPrice: payment.roomsPrice
+      ? payment.roomsPrice == "Daypass"
+        ? payment.roomsPrice
+        : formatPrice(payment.roomsPrice)
+      : "",
+    extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
+    roomsDiscount: payment.roomsDiscount
+      ? payment.roomsDiscount == "Daypass"
+        ? payment.roomsDiscount
+        : formatPrice(payment.roomsDiscount)
+      : "",
+    discountApplied: payment.discountApplied
+      ? payment.discountApplied == "true"
+        ? "Yes"
+        : "No"
+      : "",
+    voucherApplied: payment.voucherApplied
+      ? payment.voucherApplied == "true"
+        ? "Yes"
+        : "No"
+      : "",
+    priceAfterVoucher: payment.priceAfterVoucher
+      ? formatPrice(payment.priceAfterVoucher)
+      : "",
+    priceAfterDiscount: payment.priceAfterDiscount
+      ? formatPrice(payment.priceAfterDiscount)
+      : "",
+    totalGuests: totalGuests,
   };
   if (req.body.status === "Pending") {
     sendEmail(

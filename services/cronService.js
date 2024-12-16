@@ -68,6 +68,16 @@ cron.schedule("* * * * *", async () => {
         }
         payment.status = "Cancelled";
         await payment.save();
+        const totalGuests = roomDetails?.visitDate
+          ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+          : bookingInfo?.adultsAlcoholic +
+            bookingInfo?.adultsNonAlcoholic +
+            bookingInfo?.Nanny +
+            bookingInfo?.childTotal;
+
         const emailContext = {
           name: payment.name,
           email: guestDetails.email,
@@ -119,6 +129,36 @@ cron.schedule("* * * * *", async () => {
             : 0,
           vat: formatPrice(payment.vat),
           totalCost: formatPrice(payment.totalCost),
+          roomsPrice: payment.roomsPrice
+            ? payment.roomsPrice == "Daypass"
+              ? payment.roomsPrice
+              : formatPrice(payment.roomsPrice)
+            : "",
+          extrasPrice: payment.extrasPrice
+            ? formatPrice(payment.extrasPrice)
+            : "",
+          roomsDiscount: payment.roomsDiscount
+            ? payment.roomsDiscount == "Daypass"
+              ? payment.roomsDiscount
+              : formatPrice(payment.roomsDiscount)
+            : "",
+          discountApplied: payment.discountApplied
+            ? payment.discountApplied == "true"
+              ? "Yes"
+              : "No"
+            : "",
+          voucherApplied: payment.voucherApplied
+            ? payment.voucherApplied == "true"
+              ? "Yes"
+              : "No"
+            : "",
+          priceAfterVoucher: payment.priceAfterVoucher
+            ? formatPrice(payment.priceAfterVoucher)
+            : "",
+          priceAfterDiscount: payment.priceAfterDiscount
+            ? formatPrice(payment.priceAfterDiscount)
+            : "",
+          totalGuests: totalGuests,
         };
         sendEmail(
           guestDetails.email,
@@ -126,12 +166,12 @@ cron.schedule("* * * * *", async () => {
           "cancellation",
           emailContext
         );
-        sendEmail(
-          "bookings@jarabeachresort.com",
-          "Booking Cancelled",
-          "cancellation",
-          emailContext
-        );
+        // sendEmail(
+        //   "bookings@jarabeachresort.com",
+        //   "Booking Cancelled",
+        //   "cancellation",
+        //   emailContext
+        // );
       } catch (err) {
         console.log("failed to cancel");
       }
