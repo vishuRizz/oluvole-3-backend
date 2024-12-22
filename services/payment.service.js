@@ -145,12 +145,12 @@ const create = asyncErrorHandler(async (req, res) => {
         "pending_payment",
         emailContext
       );
-      // sendEmail(
-      //   "bookings@jarabeachresort.com",
-      //   "New Booking Pending",
-      //   "pending_payment",
-      //   emailContext
-      // );
+      sendEmail(
+        "bookings@jarabeachresort.com",
+        "New Booking Pending",
+        "pending_payment",
+        emailContext
+      );
     } else if (req.body.status === "Success") {
       sendEmail(
         guestDetails.email,
@@ -316,12 +316,12 @@ const confirm = asyncErrorHandler(async (req, res) => {
       "confirmation",
       emailContext
     );
-    // sendEmail(
-    //   "bookings@jarabeachresort.com",
-    //   "New Booking Confirmed",
-    //   "confirmation",
-    //   emailContext
-    // );
+    sendEmail(
+      "bookings@jarabeachresort.com",
+      "New Booking Confirmed",
+      "confirmation",
+      emailContext
+    );
   } else {
     throw new ErrorResponse("Payment Not Found", 404);
   }
@@ -437,12 +437,12 @@ const cancel = asyncErrorHandler(async (req, res) => {
       "cancellation",
       emailContext
     );
-    // sendEmail(
-    //   "bookings@jarabeachresort.com",
-    //   "Booking Cancelled",
-    //   "cancellation",
-    //   emailContext
-    // );
+    sendEmail(
+      "bookings@jarabeachresort.com",
+      "Booking Cancelled",
+      "cancellation",
+      emailContext
+    );
   } else {
     throw new ErrorResponse("Booking Not Found", 404);
   }

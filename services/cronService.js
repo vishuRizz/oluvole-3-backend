@@ -166,12 +166,12 @@ cron.schedule("* * * * *", async () => {
           "cancellation",
           emailContext
         );
-        // sendEmail(
-        //   "bookings@jarabeachresort.com",
-        //   "Booking Cancelled",
-        //   "cancellation",
-        //   emailContext
-        // );
+        sendEmail(
+          "bookings@jarabeachresort.com",
+          "Booking Cancelled",
+          "cancellation",
+          emailContext
+        );
       } catch (err) {
         console.log("failed to cancel");
       }
