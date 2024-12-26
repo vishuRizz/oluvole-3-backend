@@ -9,6 +9,19 @@ const taskSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  guestName: {
+    type: String,
+    default: "",
+  },
+  // room: {
+  //   type: String,
+  //   required: true,
+  // },
+  totalGuest: {
+    type: Number,
+    default: "",
+  },
+
   tasks: [
     {
       title: {
