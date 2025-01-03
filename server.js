@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const morgan = require("morgan");
+const logger = require("./utils/logger");
 require("dotenv").config();
 const connectDatabase = require("./connection/database");
 const { errorMiddleware, ErrorResponse } = require("./middlewares/error/error");
@@ -18,7 +19,7 @@ require("./services/cronService");
 app.use(express.json());
 
 app.use(cors({ origin: "*" }));
-app.use(morgan("dev"));
+app.use(morgan("combined", { stream: logger.stream }));
 
 app.use(errorMiddleware); // CUSTOM ERROR MIDDLEWARE
 

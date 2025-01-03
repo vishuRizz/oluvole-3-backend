@@ -2,6 +2,7 @@ const {
   asyncErrorHandler,
   ErrorResponse,
 } = require("../middlewares/error/error");
+const logger = require("../utils/logger");
 const { paymentModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
 const { sendEmail } = require("../config/mail.config");
@@ -24,7 +25,7 @@ const calculateNumberOfNights = (visitDate, endDate) => {
   const numberOfNights = Math.floor(
     (endDateObj - visitDateObj) / (1000 * 60 * 60 * 24)
   );
-  console.log(numberOfNights);
+  // console.log(numberOfNights);
   return numberOfNights;
 };
 const counting = (guestCount) => {
@@ -48,124 +49,145 @@ const counting = (guestCount) => {
 
 const create = asyncErrorHandler(async (req, res) => {
   // console.log(req.body);
-  const guestDetails = JSON.parse(req.body.guestDetails);
-  const roomDetails = JSON.parse(req.body.roomDetails);
-  const bookingInfo = req.body.bookingInfo
-    ? JSON.parse(req.body.bookingInfo)
-    : null;
-  // const costBreakDown = JSON.parse(req.body.CostBreakDown);
-  const totalGuests = roomDetails?.visitDate
-    ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
-    : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
-  let createDaypass = await paymentModel.create(req.body);
-  if (createDaypass) {
-    res.status(statusCode.accepted).json(createDaypass);
-    const emailContext = {
-      name: req.body.name,
-      email: guestDetails.email,
-      id: req.body.ref,
-      bookingType:
-        roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
-        "Day Pass",
-      checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
-      checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
-      numberOfGuests: roomDetails?.visitDate
-        ? `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-          } Children ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-          } Toddlers ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-          } Infants`
-        : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${
-            roomDetails?.childrenCount ?? 0
-          } Children`,
-      numberOfNights: roomDetails?.visitDate
-        ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
-        : "Day Pass",
-      extras:
-        roomDetails?.visitDate && roomDetails?.finalData
-          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
-          : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : "No Extras",
-      subTotal: formatPrice(req.body.subTotal),
-      multiNightDiscount: req.body.discount.toLocaleString(),
-      clubMemberDiscount: req.body.voucher,
-      multiNightDiscountAvailable: req.body.multiNightDiscount
-        ? req.body.multiNightDiscount
-        : 0,
-      vat: formatPrice(req.body.vat),
-      totalCost: formatPrice(req.body.totalCost),
-      roomsPrice:
-        req.body.roomsPrice == "Daypass"
-          ? req.body.roomsPrice
-          : formatPrice(req.body.roomsPrice),
-      extrasPrice: formatPrice(req.body.extrasPrice),
-      roomsDiscount:
-        req.body.roomsDiscount == "Daypass"
-          ? req.body.roomsDiscount
-          : formatPrice(req.body.roomsDiscount),
-      discountApplied: req.body.discountApplied
-        ? req.body.discountApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      voucherApplied: req.body.voucherApplied
-        ? req.body.voucherApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      priceAfterVoucher: req.body.priceAfterVoucher
-        ? formatPrice(req.body.priceAfterVoucher)
-        : formatPrice(req.body.subTotal),
-      priceAfterDiscount: req.body.priceAfterDiscount
-        ? formatPrice(req.body.priceAfterDiscount)
-        : formatPrice(req.body.subTotal),
-      totalGuests: totalGuests,
-    };
-    if (req.body.status === "Pending") {
-      sendEmail(
-        guestDetails.email,
-        "Your Booking Is Pending",
-        "pending_payment",
-        emailContext
-      );
-      sendEmail(
-        "bookings@jarabeachresort.com",
-        "New Booking Pending",
-        "pending_payment",
-        emailContext
-      );
-    } else if (req.body.status === "Success") {
-      sendEmail(
-        guestDetails.email,
-        "Your Booking Is Confirmed",
-        "confirmation",
-        emailContext
-      );
-      sendEmail(
-        "bookings@jarabeachresort.com",
-        "New Booking Confirmed",
-        "confirmation",
-        emailContext
-      );
+  try {
+    logger.info("Processing payment request", { requestBody: req.body });
+    const guestDetails = JSON.parse(req.body.guestDetails);
+    const roomDetails = JSON.parse(req.body.roomDetails);
+    const bookingInfo = req.body.bookingInfo
+      ? JSON.parse(req.body.bookingInfo)
+      : null;
+    // const costBreakDown = JSON.parse(req.body.CostBreakDown);
+    if (!guestDetails || !roomDetails) {
+      logger.error("Invalid payment data", { guestDetails, roomDetails });
+      throw new ErrorResponse("Invalid payment data", 400);
     }
-  } else {
+    const totalGuests = roomDetails?.visitDate
+      ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      : bookingInfo?.adultsAlcoholic +
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
+    let createDaypass = await paymentModel.create(req.body);
+    if (createDaypass) {
+      logger.info("Payment successfully created", {
+        payment: createDaypass._id,
+      });
+      res.status(statusCode.accepted).json(createDaypass);
+      const emailContext = {
+        name: req.body.name,
+        email: guestDetails.email,
+        id: req.body.ref,
+        bookingType:
+          roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
+          "Day Pass",
+        checkIn: roomDetails?.visitDate
+          ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
+          : `${roomDetails?.startDate}, (12noon)`,
+        checkOut: roomDetails?.endDate
+          ? `${formatDate(roomDetails?.endDate)}, (11am)`
+          : `${roomDetails?.startDate}, (6pm)`,
+        numberOfGuests: roomDetails?.visitDate
+          ? `${
+              roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+            } Adults, ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
+              0
+            } Children ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
+              0
+            } Toddlers ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+            } Infants`
+          : bookingInfo
+          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${
+              roomDetails?.childrenCount ?? 0
+            } Children`,
+        numberOfNights: roomDetails?.visitDate
+          ? calculateNumberOfNights(
+              roomDetails?.visitDate,
+              roomDetails?.endDate
+            )
+          : "Day Pass",
+        extras:
+          roomDetails?.visitDate && roomDetails?.finalData
+            ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
+            : roomDetails?.startDate && roomDetails?.extras
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+            : "No Extras",
+        subTotal: formatPrice(req.body.subTotal),
+        multiNightDiscount: req.body.discount.toLocaleString(),
+        clubMemberDiscount: req.body.voucher,
+        multiNightDiscountAvailable: req.body.multiNightDiscount
+          ? req.body.multiNightDiscount
+          : 0,
+        vat: formatPrice(req.body.vat),
+        totalCost: formatPrice(req.body.totalCost),
+        roomsPrice:
+          req.body.roomsPrice == "Daypass"
+            ? req.body.roomsPrice
+            : formatPrice(req.body.roomsPrice),
+        extrasPrice: formatPrice(req.body.extrasPrice),
+        roomsDiscount:
+          req.body.roomsDiscount == "Daypass"
+            ? req.body.roomsDiscount
+            : formatPrice(req.body.roomsDiscount),
+        discountApplied: req.body.discountApplied
+          ? req.body.discountApplied == "true"
+            ? "Yes"
+            : "No"
+          : "",
+        voucherApplied: req.body.voucherApplied
+          ? req.body.voucherApplied == "true"
+            ? "Yes"
+            : "No"
+          : "",
+        priceAfterVoucher: req.body.priceAfterVoucher
+          ? formatPrice(req.body.priceAfterVoucher)
+          : formatPrice(req.body.subTotal),
+        priceAfterDiscount: req.body.priceAfterDiscount
+          ? formatPrice(req.body.priceAfterDiscount)
+          : formatPrice(req.body.subTotal),
+        totalGuests: totalGuests,
+      };
+      if (req.body.status === "Pending") {
+        sendEmail(
+          guestDetails.email,
+          "Your Booking Is Pending",
+          "pending_payment",
+          emailContext
+        );
+        sendEmail(
+          "bookings@jarabeachresort.com",
+          "New Booking Pending",
+          "pending_payment",
+          emailContext
+        );
+      } else if (req.body.status === "Success") {
+        sendEmail(
+          guestDetails.email,
+          "Your Booking Is Confirmed",
+          "confirmation",
+          emailContext
+        );
+        sendEmail(
+          "bookings@jarabeachresort.com",
+          "New Booking Confirmed",
+          "confirmation",
+          emailContext
+        );
+      }
+    } else {
+      throw new ErrorResponse("Failed To Create Payment", 404);
+    }
+  } catch (error) {
+    logger.error("Error during payment creation", {
+      error: error.message,
+      stack: error.stack,
+    });
     throw new ErrorResponse("Failed To Create Payment", 404);
   }
 });
