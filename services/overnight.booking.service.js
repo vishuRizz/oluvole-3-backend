@@ -1,4 +1,5 @@
 const { overnightBooking } = require("../models/overnight.booking.schema");
+const logger = require("../utils/logger");
 const {
   ErrorResponse,
   asyncErrorHandler,
@@ -6,28 +7,44 @@ const {
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
 const createBooking = asyncErrorHandler(async (req, res) => {
-  let { guestCount, guestDetails, roomDetails } = req.body;
-  guestDetails = JSON.parse(guestDetails);
-  roomDetails = JSON.parse(roomDetails);
-  const file = req.file;
-  const fileUrl = file
-    ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`
-    : null;
-  const updatedGuestDetails = {
-    ...guestDetails,
-    photo: fileUrl,
-  };
+  try {
+    let { guestCount, guestDetails, roomDetails } = req.body;
+    guestDetails = JSON.parse(guestDetails);
+    roomDetails = JSON.parse(roomDetails);
+    const file = req.file;
+    const fileData = file ? file.filename : "no file";
+    if (!guestCount || !guestDetails || !roomDetails || !file) {
+      logger.error("Invalid Booking Data", { body: req.body, file: fileData });
+      throw new ErrorResponse("Invalid request", 400);
+    }
+    logger.info("Booking initiated", { email: guestDetails.email });
+    const fileUrl = file
+      ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`
+      : null;
+    const updatedGuestDetails = {
+      ...guestDetails,
+      photo: fileUrl,
+    };
 
-  const { nanoid } = await import("nanoid");
+    const { nanoid } = await import("nanoid");
 
-  let create = await overnightBooking.create({
-    totalGuest: guestCount,
-    bookingDetails: roomDetails,
-    guestDetails: updatedGuestDetails,
-    shortId: nanoid(8).toUpperCase(), // Generate a short unique ID
-  });
+    let create = await overnightBooking.create({
+      totalGuest: guestCount,
+      bookingDetails: roomDetails,
+      guestDetails: updatedGuestDetails,
+      shortId: nanoid(8).toUpperCase(), // Generate a short unique ID
+    });
 
-  res.status(200).json(create); // Send the booking with the short ID
+    res.status(200).json(create);
+  } catch (error) {
+    logger.error("Error creating booking", {
+      error: error.message,
+      stack: error.stack,
+      body: req.body,
+    });
+    res.status(500).json(error);
+  }
+  // Send the booking with the short ID
 });
 
 const getAllBooking = asyncErrorHandler(async (req, res) => {

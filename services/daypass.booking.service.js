@@ -5,32 +5,50 @@ const {
 } = require("../middlewares/error/error");
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
+const logger = require("../utils/logger");
 
 const createBooking = asyncErrorHandler(async (req, res) => {
-  let { guestCount, guestDetails, roomDetails } = req.body;
-  guestDetails = JSON.parse(guestDetails);
-  roomDetails = JSON.parse(roomDetails);
-  const file = req.file;
-  const fileUrl = file
-    ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`
-    : null;
-  const updatedGuestDetails = {
-    ...guestDetails,
-    photo: fileUrl,
-  };
+  try {
+    console.log("coming details", req.body);
+    let { guestCount, guestDetails, roomDetails } = req.body;
+    guestDetails = JSON.parse(guestDetails);
+    roomDetails = JSON.parse(roomDetails);
+    const file = req.file;
+    const fileData = file ? file.filename : "no file";
+    if (!guestCount || !guestDetails || !roomDetails || !file) {
+      logger.error("Invalid Booking Data", { body: req.body, file: fileData });
+      throw new ErrorResponse("Invalid request", 400);
+    }
+    logger.info("Booking initiated", { email: guestDetails.email });
+    const fileUrl = file
+      ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`
+      : null;
+    const updatedGuestDetails = {
+      ...guestDetails,
+      photo: fileUrl,
+    };
 
-  // Generate a short ID
-  // const shortId = shortid.generate(); // Generate a short unique ID
-  const { nanoid } = await import("nanoid");
+    // Generate a short ID
+    // const shortId = shortid.generate(); // Generate a short unique ID
+    const { nanoid } = await import("nanoid");
 
-  let create = await daypassBooking.create({
-    totalGuest: guestCount,
-    bookingDetails: roomDetails,
-    guestDetails: updatedGuestDetails,
-    shortId: nanoid(8).toUpperCase(), // Store the short ID
-  });
+    let create = await daypassBooking.create({
+      totalGuest: guestCount,
+      bookingDetails: roomDetails,
+      guestDetails: updatedGuestDetails,
+      shortId: nanoid(8).toUpperCase(), // Store the short ID
+    });
 
-  res.status(200).json(create); // Send the booking with the short ID
+    res.status(200).json(create);
+    // Send the booking with the short ID
+  } catch (error) {
+    logger.error("Error creating booking", {
+      error: error.message,
+      stack: error.stack,
+      body: req.body,
+    });
+    res.status(500).json(error);
+  }
 });
 
 const getAllBooking = asyncErrorHandler(async (req, res) => {

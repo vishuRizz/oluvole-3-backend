@@ -1,0 +1,2 @@
+2025-01-04 01:19:16 [ERROR]: Error creating booking {"error":"req.body.toString is not a function"}
+2025-01-04 01:41:02 [ERROR]: Error creating booking {"error":"Unexpected token o in JSON at position 1"}
