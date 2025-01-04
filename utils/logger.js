@@ -1,5 +1,34 @@
 const { createLogger, format, transports } = require("winston");
+const TransportStream = require("winston-transport");
 const DailyRotateFile = require("winston-daily-rotate-file");
+const { sendEmail } = require("../config/mail.config");
+
+// Custom transport for email alerts
+class EmailAlertTransport extends TransportStream {
+  constructor(opts) {
+    super(opts); // Initialize the transport
+  }
+
+  log(info, callback) {
+    // Only handle 'error' level logs
+    if (info.level === "error") {
+      sendEmail(
+        "zekudk@gmail.com", // Your email to receive alerts
+        "Application Error Alert",
+        "error_alert", // Template name
+        {
+          timestamp: new Date().toISOString(),
+          errorMessage: info.message,
+          stackTrace: info.stack || "No stack trace available",
+          fullError: JSON.stringify(info, null, 2),
+        }
+      );
+    }
+
+    // Required to indicate that the log was processed
+    callback();
+  }
+}
 
 // Configure the logger
 const logger = createLogger({
@@ -39,6 +68,9 @@ const logger = createLogger({
       maxSize: "20m",
       maxFiles: "14d",
     }),
+
+    // Add the custom email alert transport
+    new EmailAlertTransport(),
   ],
 });
 
