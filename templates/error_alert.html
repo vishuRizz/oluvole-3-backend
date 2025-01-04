@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+      }
+      .header {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px;
+      }
+      .content {
+        margin: 20px;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 10px;
+        border: 1px solid #ddd;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>Application Error Alert</h2>
+    </div>
+    <div class="content">
+      <p><strong>Timestamp:</strong> {{timestamp}}</p>
+      <p><strong>Error Message:</strong> {{errorMessage}}</p>
+      <p><strong>Stack Trace:</strong></p>
+      <pre>{{stackTrace}}</pre>
+      <p><strong>Full Error Details:</strong></p>
+      <pre>{{fullError}}</pre>
+      <!-- Placeholder for the full error -->
+      <p>Best Regards,</p>
+      <p>Your Application Team</p>
+    </div>
+  </body>
+</html>
