@@ -2,8 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const morgan = require("morgan");
-const logger = require("./utils/logger");
 require("dotenv").config();
+const logger = require("./utils/logger");
 const connectDatabase = require("./connection/database");
 const { errorMiddleware, ErrorResponse } = require("./middlewares/error/error");
 const { statusCode } = require("./utils/statusCode");
@@ -32,6 +32,17 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // CUSTOM 
 
 app.use("/api/v1", allRoutes); // ALL API END POINTS
 
+app.get("/test-error", (req, res) => {
+  try {
+    throw new Error("This is a test error");
+  } catch (error) {
+    logger.error("Test error message for email alert", {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).send("Test error triggered");
+  }
+});
 // INAVLID API CALL
 app.use((req, res, next) => {
   next(new ErrorResponse("Invalid Api", statusCode?.notFound));
