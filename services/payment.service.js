@@ -4,6 +4,7 @@ const {
 } = require("../middlewares/error/error");
 const logger = require("../utils/logger");
 const { paymentModel } = require("../models");
+const { loyaltyCoinModel } = require("../models/loyaltyPoints"); // Adjust path
 const { statusCode } = require("../utils/statusCode");
 const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
@@ -71,6 +72,39 @@ const create = asyncErrorHandler(async (req, res) => {
         bookingInfo?.Nanny +
         bookingInfo?.childTotal;
     let createDaypass = await paymentModel.create(req.body);
+
+    //GENERATE LOYALTY POINTS========
+    
+    
+    try {
+    let amount = createDaypass.amount
+    const guestDetails = JSON.parse(createDaypass.guestDetails);
+    let email = guestDetails.email;
+    
+      if(createDaypass.status === 'Pending'){
+        let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
+        if (loyaltyRecord) {
+          loyaltyRecord.totalSpent += Number(amount);
+          loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
+          loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
+          await loyaltyRecord.save();
+          logger.info("Loyalty points updated", { email, totalSpent: loyaltyRecord.totalSpent, points: loyaltyRecord.points });
+        } else {
+          const points = Math.floor(amount / 10000);
+          const newLoyalty = new loyaltyCoinModel({
+            email,
+            totalSpent: amount,
+            points: points,
+            redeemable: points >= 50
+          });
+          await newLoyalty.save();
+          logger.info("Loyalty record created", { email, totalSpent: amount, points: newLoyalty.points });
+        }
+      }
+    } catch (error) {
+      console.log('error while generating loyalty points:',error)
+    }
+
     if (createDaypass) {
       logger.info("Payment successfully created", {
         payment: createDaypass._id,
