@@ -4,7 +4,7 @@ const {
 } = require("../middlewares/error/error");
 const logger = require("../utils/logger");
 const { paymentModel } = require("../models");
-const { loyaltyCoinModel } = require("../models/loyaltyPoints"); 
+const { loyaltyCoinModel } = require("../models/loyaltyPoints");
 const { statusCode } = require("../utils/statusCode");
 const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
@@ -64,24 +64,24 @@ const create = asyncErrorHandler(async (req, res) => {
     }
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
     let createDaypass = await paymentModel.create(req.body);
 
     //GENERATE LOYALTY POINTS========
-    
-    
+
+
     try {
-    let amount = createDaypass.amount
-    const guestDetails = JSON.parse(createDaypass.guestDetails);
-    let email = guestDetails.email;
-    
-      if(createDaypass.status === 'Success'){
+      let amount = createDaypass.amount
+      const guestDetails = JSON.parse(createDaypass.guestDetails);
+      let email = guestDetails.email;
+
+      if (createDaypass.status === 'Success') {
         let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
         if (loyaltyRecord) {
           loyaltyRecord.totalSpent += Number(amount);
@@ -102,7 +102,7 @@ const create = asyncErrorHandler(async (req, res) => {
         }
       }
     } catch (error) {
-      console.log('error while generating loyalty points:',error)
+      console.log('error while generating loyalty points:', error)
     }
 
     if (createDaypass) {
@@ -124,34 +124,29 @@ const create = asyncErrorHandler(async (req, res) => {
           ? `${formatDate(roomDetails?.endDate)}, (11am)`
           : `${roomDetails?.startDate}, (6pm)`,
         numberOfGuests: roomDetails?.visitDate
-          ? `${
-              roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-            } Adults, ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
-              0
-            } Children ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
-              0
-            } Toddlers ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-            } Infants`
+          ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+          } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
+          0
+          } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
+          0
+          } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+          } Infants`
           : bookingInfo
-          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-          : `${roomDetails?.adultsCount ?? 0} Adults, ${
-              roomDetails?.childrenCount ?? 0
+            ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+            : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
             } Children`,
         numberOfNights: roomDetails?.visitDate
           ? calculateNumberOfNights(
-              roomDetails?.visitDate,
-              roomDetails?.endDate
-            )
+            roomDetails?.visitDate,
+            roomDetails?.endDate
+          )
           : "Day Pass",
         extras:
           roomDetails?.visitDate && roomDetails?.finalData
             ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
             : roomDetails?.startDate && roomDetails?.extras
-            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-            : "No Extras",
+              ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+              : "No Extras",
         subTotal: formatPrice(req.body.subTotal),
         multiNightDiscount: req.body.discount.toLocaleString(),
         clubMemberDiscount: req.body.voucher,
@@ -276,6 +271,33 @@ const confirm = asyncErrorHandler(async (req, res) => {
     payment.status = "Success"; // Update the status to confirm
     payment.method = `Bank Transfer ${bank}`;
     await payment.save();
+
+
+    if (payment) {
+      let amount = payment.amount
+      const guestDetails = JSON.parse(payment.guestDetails);
+      let email = guestDetails.email;
+      let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
+      if (loyaltyRecord) {
+        loyaltyRecord.totalSpent += Number(amount);
+        loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
+        loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
+        await loyaltyRecord.save();
+        logger.info("Loyalty points updated", { email, totalSpent: loyaltyRecord.totalSpent, points: loyaltyRecord.points });
+      } else {
+        const points = Math.floor(amount / 10000);
+        const newLoyalty = new loyaltyCoinModel({
+          email,
+          totalSpent: amount,
+          points: points,
+          redeemable: points >= 50
+        });
+        await newLoyalty.save();
+        logger.info("Loyalty record created", { email, totalSpent: amount, points: newLoyalty.points });
+      }
+    }
+
+
     res.status(statusCode.accepted).json(payment);
     const guestDetails = JSON.parse(payment.guestDetails);
     const roomDetails = JSON.parse(payment.roomDetails);
@@ -284,13 +306,13 @@ const confirm = asyncErrorHandler(async (req, res) => {
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
     const emailContext = {
       name: payment.name,
@@ -306,19 +328,14 @@ const confirm = asyncErrorHandler(async (req, res) => {
         ? `${formatDate(roomDetails?.endDate)}, (11am)`
         : `${roomDetails?.startDate}, (6pm)`,
       numberOfGuests: roomDetails?.visitDate
-        ? `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-          } Children ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-          } Toddlers ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-          } Infants`
+        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+        } Infants`
         : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${
-            roomDetails?.childrenCount ?? 0
+          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
           } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -327,8 +344,8 @@ const confirm = asyncErrorHandler(async (req, res) => {
         roomDetails?.visitDate && roomDetails?.finalData
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
           : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : "No Extras",
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+            : "No Extras",
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
       clubMemberDiscount: payment.voucher,
@@ -405,13 +422,13 @@ const cancel = asyncErrorHandler(async (req, res) => {
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
     const emailContext = {
       name: payment.name,
@@ -427,19 +444,14 @@ const cancel = asyncErrorHandler(async (req, res) => {
         ? `${formatDate(roomDetails?.endDate)}, (11am)`
         : `${roomDetails?.startDate}, (6pm)`,
       numberOfGuests: roomDetails?.visitDate
-        ? `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-          } Children ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-          } Toddlers ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-          } Infants`
+        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+        } Infants`
         : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${
-            roomDetails?.childrenCount ?? 0
+          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
           } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -448,8 +460,8 @@ const cancel = asyncErrorHandler(async (req, res) => {
         roomDetails?.visitDate && roomDetails?.finalData
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
           : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : "No Extras",
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+            : "No Extras",
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
       clubMemberDiscount: payment.voucher,
@@ -522,13 +534,13 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     : null;
   const totalGuests = roomDetails?.visitDate
     ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
     : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
+    bookingInfo?.adultsNonAlcoholic +
+    bookingInfo?.Nanny +
+    bookingInfo?.childTotal;
 
   const emailContext = {
     name: payment.name,
@@ -543,17 +555,13 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       ? `${formatDate(roomDetails?.endDate)}, (11am)`
       : `${roomDetails?.startDate}, (6pm)`,
     numberOfGuests: roomDetails?.visitDate
-      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-        } Children ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-        } Toddlers ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-        } Infants`
+      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+      } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+      } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+      } Infants`
       : bookingInfo
-      ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-      : `${roomDetails?.adultsCount ?? 0} Adults, ${
-          roomDetails?.childrenCount ?? 0
+        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+        : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
         } Children`,
     numberOfNights: roomDetails?.visitDate
       ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -562,8 +570,8 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       roomDetails?.visitDate && roomDetails?.finalData
         ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
         : roomDetails?.startDate && roomDetails?.extras
-        ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-        : "No Extras",
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+          : "No Extras",
     subTotal: formatPrice(payment.subTotal),
     multiNightDiscount: payment.discount.toLocaleString(),
     clubMemberDiscount: payment.voucher,
@@ -577,10 +585,10 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       payment.previousPaymentStatus == "Pending"
         ? formatPrice(payment.totalCost)
         : parseFloat(payment.totalCost) - parseFloat(payment.previousCost) > 0
-        ? (
+          ? (
             parseFloat(payment.totalCost) - parseFloat(payment.previousCost)
           ).toLocaleString()
-        : 0,
+          : 0,
     roomsPrice: payment.roomsPrice
       ? payment.roomsPrice == "Daypass"
         ? payment.roomsPrice
