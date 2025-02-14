@@ -4,7 +4,7 @@ const {
 } = require("../middlewares/error/error");
 const logger = require("../utils/logger");
 const { paymentModel } = require("../models");
-const { loyaltyCoinModel } = require("../models/loyaltyPoints"); // Adjust path
+const { loyaltyCoinModel } = require("../models/loyaltyPoints"); 
 const { statusCode } = require("../utils/statusCode");
 const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
@@ -81,7 +81,7 @@ const create = asyncErrorHandler(async (req, res) => {
     const guestDetails = JSON.parse(createDaypass.guestDetails);
     let email = guestDetails.email;
     
-      if(createDaypass.status === 'Pending'){
+      if(createDaypass.status === 'Success'){
         let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
         if (loyaltyRecord) {
           loyaltyRecord.totalSpent += Number(amount);

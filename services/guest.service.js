@@ -4,7 +4,7 @@ const {
 } = require("../middlewares/error/error");
 const { guestModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
-
+const { loyaltyCoinModel } = require("../models/loyaltyPoints");
 const createGuest = asyncErrorHandler(async (req, res) => {
   // let {name,gender,email,mobile,member,birthdayReminded} = req.body
   let guestData = req.body;
@@ -21,7 +21,14 @@ const createGuest = asyncErrorHandler(async (req, res) => {
 
 const getGuest = asyncErrorHandler(async (req, res) => {
   let allGuest = await guestModel.find({}).sort({ createdAt: -1 });
+  
   if (allGuest.length > 0) {
+    let loyaltyPoints =  await loyaltyCoinModel.find({})
+    const loyaltyPointsMap = new Map(loyaltyPoints.map(lp => [lp.email, lp.points]));
+    allGuest = allGuest.map(guest => ({
+      ...guest.toObject(),
+      points: loyaltyPointsMap.get(guest.email) || 0
+    }));
     res.status(statusCode.accepted).json(allGuest);
   } else {
     throw new ErrorResponse("No Guest Found", 404);
