@@ -12,7 +12,6 @@ const {
   requestPasswordReset,
   resetPassword,
 } = require("../services/account.service");
-
 const router = require("express").Router();
 
 router.post("/register", regitserAccountValidation, registerAccount); // REGISTER

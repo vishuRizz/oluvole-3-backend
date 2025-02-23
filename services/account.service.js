@@ -1,5 +1,6 @@
 const { accountModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 const {
   ErrorResponse,
   asyncErrorHandler,
@@ -14,6 +15,7 @@ const registerAccount = asyncErrorHandler(async (req, res) => {
   let { username, email, password, role } = req.body;
   let findAdmin = await accountModel.findOne({ email });
   if (findAdmin) {
+    AdminLogEvent(email,'None','Register','Failed','User Already exist','None')
     throw new ErrorResponse("User Already Exits", 400);
   } else {
     let hashPassword = await bcrypt.hash(password, 10);
@@ -25,16 +27,20 @@ const registerAccount = asyncErrorHandler(async (req, res) => {
     });
     let { _id, createdAt, updatedAt, ...adminInfo } = registerAdmin._doc;
     let generateToken = await createToken(adminInfo);
+    AdminLogEvent(registerAdmin._id,'None','Register','Success',`New User Registered (${email})`,'None')
+
     res.status(200).json({ error: false, token: generateToken });
   }
 });
 
 const loginAccount = asyncErrorHandler(async (req, res) => {
+  let { email, password } = req.body;
   let findAdmin = await accountModel.findOne({
     email: req.body.email,
     role: { $in: ["admin", "superAdmin"] },
   });
   if (!findAdmin) {
+    AdminLogEvent(email,'None','Try To Login','Failed','User Not Found','None')
     throw new ErrorResponse("User Not Found", 404);
   } else {
     let comparePassword = await bcrypt.compare(
@@ -42,6 +48,7 @@ const loginAccount = asyncErrorHandler(async (req, res) => {
       findAdmin.password
     );
     if (!comparePassword) {
+      AdminLogEvent(email,'None','Try To Login','Failed','Invalid Credentials','None')
       throw new ErrorResponse("Invalid Credentials", statusCode.notAcceptable);
     } else {
       let {
@@ -54,6 +61,7 @@ const loginAccount = asyncErrorHandler(async (req, res) => {
         ...adminInfo
       } = findAdmin._doc;
       let generateToken = await createToken(adminInfo);
+      AdminLogEvent(email,'None','Try To Login','Success','User Successfully Logged In','None')
       res.status(200).json({ error: false, token: generateToken, adminInfo });
     }
   }
@@ -80,10 +88,14 @@ const getUserByRole = asyncErrorHandler(async (req, res) => {
 const updateAccount = asyncErrorHandler(async (req, res) => {});
 
 const deleteAccount = asyncErrorHandler(async (req, res) => {
+  let actionAdminId = req.body.adminId
+  console.log('actionAdminId=====',actionAdminId)
   let deleteAccount = await accountModel.findByIdAndDelete(req.params.id);
   if (!deleteAccount) {
+    AdminLogEvent(actionAdminId,req.params?.id,'Delete User Account','Faild','Trying to Delete User Account But Invalid Id',req.params?.id)
     throw new ErrorResponse("Invalid Id", statusCode.notFound);
   } else {
+    AdminLogEvent(actionAdminId,req.params?.id,'Delete User Account','Success','User Successfully Deleted',req.params?.id)
     res.status(200).json({ msg: "Account Deleted" });
   }
 });
@@ -92,6 +104,7 @@ const requestPasswordReset = asyncErrorHandler(async (req, res) => {
   const { email } = req.body;
   const user = await accountModel.findOne({ email });
   if (!user) {
+    AdminLogEvent(email,'None','Reset Password','Faild','User not found','None')
     throw new ErrorResponse("User not found", statusCode.notFound);
   }
 
@@ -101,10 +114,9 @@ const requestPasswordReset = asyncErrorHandler(async (req, res) => {
   user.resetPasswordToken = resetToken;
   user.resetPasswordExpiry = resetTokenExpiry;
   await user.save();
-
   const resetUrl = `https://booking.jarabeachresort.com/admin/jara/reset-password/${resetToken}`;
-
   try {
+    AdminLogEvent(email,'None','Reset Password','Success','Shared Reset Password Link','None')
     sendEmail(user.email, "Password Reset Request", "resetPassword", {
       resetUrl,
       email: user.email,
@@ -114,6 +126,7 @@ const requestPasswordReset = asyncErrorHandler(async (req, res) => {
     user.resetPasswordToken = undefined;
     user.resetPasswordExpiry = undefined;
     await user.save();
+    AdminLogEvent(email,'None','Reset Password','Faild','Email could not be sent','None')
     throw new ErrorResponse(
       "Email could not be sent",
       statusCode.internalServerError
@@ -138,7 +151,7 @@ const resetPassword = asyncErrorHandler(async (req, res) => {
   user.resetPasswordToken = undefined;
   user.resetPasswordExpiry = undefined;
   await user.save();
-
+  AdminLogEvent(user.email,'None','Reset Password','Success','Successfully Reset Password','None')
   res.status(200).json({ success: true, message: "Password reset successful" });
 });
 module.exports = {

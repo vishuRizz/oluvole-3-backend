@@ -11,6 +11,7 @@ const paymentRoute = require("./payment.router");
 const overnightBookingRoute = require("./overnight.booking.router");
 const daypassBookingRoute = require("./daypass.booking.router");
 const paymentRoutes = require("./paymentRoutes");
+
 // SETTINGS
 const termRoute = require("./term.router");
 const roomRoute = require("./room.router");
@@ -38,6 +39,8 @@ const peakOffPriceRoute = require("./settings.router");
 const blockedRoomRoute = require("./blockedRoom.router");
 const peakOffSeasonalRoute = require("./peakOffSeasonal.router");
 const carServiceRoute = require("./carService.router");
+const adminLogsRoutes = require("./adminLogs.router");
+
 
 allRoutes.use("/admin", accountRoute);
 allRoutes.use("/guest", guestRoute);
@@ -79,5 +82,6 @@ allRoutes.use("/peak", peakOffPriceRoute);
 allRoutes.use("/blocked/room", blockedRoomRoute);
 allRoutes.use("/peakSeasonal", peakOffSeasonalRoute);
 allRoutes.use("/carService", carServiceRoute);
+allRoutes.use("/get/admin", adminLogsRoutes);
 
 module.exports = { allRoutes };
