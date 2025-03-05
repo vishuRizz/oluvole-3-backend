@@ -3,6 +3,7 @@ const {
   asyncErrorHandler,
   ErrorResponse,
 } = require("../middlewares/error/error");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 const getAllSeasonal = asyncErrorHandler(async (req, res) => {
   const seasonalDates = await Seasonal.find({});
@@ -18,6 +19,7 @@ const createSeasonal = asyncErrorHandler(async (req, res) => {
   const newSeasonalDate = new Seasonal({ date, description });
   await newSeasonalDate.save();
   if (newSeasonalDate) {
+    AdminLogEvent(req.body.adminId,'None','Added New Seasonal Dates','Success',"Successfully Added New Seasonal Dates ("+newSeasonalDate.date+") ",newSeasonalDate._id)
     res.status(201).json(newSeasonalDate);
   } else {
     throw new ErrorResponse("No seasonal dates found", 404);
@@ -43,6 +45,7 @@ const deleteSeasonal = asyncErrorHandler(async (req, res) => {
   const seasonalDate = await Seasonal.findByIdAndDelete(id);
 
   if (seasonalDate) {
+    AdminLogEvent(req.body.adminId,'None','Delete Seasonal Dates','Success',"Successfully Deleted Seasonal Dates ("+seasonalDate.date+") ",seasonalDate._id)
     res.status(200).json({ message: "Seasonal date deleted" });
   } else {
     throw new ErrorResponse("Seasonal date not found", 404);

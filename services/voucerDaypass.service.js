@@ -1,5 +1,7 @@
 const { dayPassVouherModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
+
 const {
   ErrorResponse,
   asyncErrorHandler,
@@ -7,6 +9,7 @@ const {
 
 const createDiscount = asyncErrorHandler(async (req, res) => {
   let staffInfo = await dayPassVouherModel.create(req.body);
+  AdminLogEvent(req.body.adminId,'None','Added New Day Pass Vouchers','Success',"Successfully Added New Day Pass Vouchers ("+staffInfo.code+") ",staffInfo._id)
   res.status(200).json(staffInfo);
 });
 
@@ -24,6 +27,7 @@ const deleteDiscount = asyncErrorHandler(async (req, res) => {
   if (!deletevoucher) {
     throw new ErrorResponse("Invalid Id", statusCode.notFound);
   } else {
+    AdminLogEvent(req.body.adminId,'None','Delete Day Pass Vouchers','Success',"Successfully Deleted Day Pass Vouchers ("+deletevoucher.code+") ",'None')
     res.status(200).json({ msg: "Discount Deleted" });
   }
 });

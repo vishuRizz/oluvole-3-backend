@@ -13,6 +13,7 @@ const nodeCache = require("../utils/cache");
 
 const registerAccount = asyncErrorHandler(async (req, res) => {
   let { username, email, password, role } = req.body;
+  console.log('==============req.body',req.body)
   let findAdmin = await accountModel.findOne({ email });
   if (findAdmin) {
     AdminLogEvent(email,'None','Register','Failed','User Already exist','None')

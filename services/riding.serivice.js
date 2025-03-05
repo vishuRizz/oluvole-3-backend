@@ -1,11 +1,13 @@
 const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
 const { ridingModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 
 const create = asyncErrorHandler(async (req, res) => {
     let createDaypass = await ridingModel.create(req.body)
     if (createDaypass) {
+        AdminLogEvent(req.body.adminId,'None','Added New Go-Kart and Horse Riding','Success',"Successfully Added New Go-Kart and Horse Riding ("+createDaypass.title+") ",createDaypass._id)
         res.status(statusCode.accepted).json(createDaypass)
     }
     else {
@@ -25,6 +27,7 @@ const update = asyncErrorHandler(async (req, res) => {
     }
     let updateData = await ridingModel.findByIdAndUpdate(req.params.id, updatedbody)
     if (updateData) {
+        AdminLogEvent(req.body.adminId,'None','Update Go-Kart and Horse Riding','Success',"Successfully Updated Go-Kart and Horse Riding ("+updateData.title+") ",updateData._id)
         res.status(statusCode.accepted).json(updateData)
     }
     else {

@@ -1,11 +1,13 @@
 const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
 const { blockedModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 
 const create = asyncErrorHandler(async (req, res) => {
     let createDaypass = await blockedModel.create(req.body)
     if (createDaypass) {
+        AdminLogEvent(req.body.adminId,'None','Added Block Day Pass Booking Dates','Success',"Successfully Added Block Day Pass Booking Dates ("+createDaypass.date+") ",createDaypass._id)
         res.status(statusCode.accepted).json(createDaypass)
     }
     else {
@@ -35,7 +37,10 @@ const getAll = asyncErrorHandler(async (req, res) => {
 
 const del = asyncErrorHandler(async (req, res) => {
     let allDaypass = await blockedModel.findByIdAndDelete(req.params.id)
-    if (allDaypass) { res.status(statusCode.accepted).json({ msg: "DELETED" }) }
+    if (allDaypass) { 
+        AdminLogEvent(req.body.adminId,'None','Removed Block Day Pass Booking Dates','Success',"Successfully Removed Block Day Pass Booking Dates ("+allDaypass.date+") ",allDaypass._id)
+        res.status(statusCode.accepted).json({ msg: "DELETED" })
+     }
     else { throw new ErrorResponse("No Massage Found", 404) }
 })
 

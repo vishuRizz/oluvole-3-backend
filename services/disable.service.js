@@ -4,21 +4,24 @@ const {
 } = require("../middlewares/error/error");
 const { disableModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 const createOrUpdate = asyncErrorHandler(async (req, res) => {
   const { type, isDisabled } = req.body;
-
   try {
     const existingEntry = await disableModel.findOne({ type });
     if (existingEntry) {
       existingEntry.isDisabled = isDisabled;
       await existingEntry.save();
+      AdminLogEvent(req.body.adminId,'None','Enable/Disable Extras','Success',"Successfully Enable Or Disable ("+existingEntry.type+") ","None")
       return res.status(statusCode.accepted).json(existingEntry);
     } else {
       const disableEntry = new disableModel({ type, isDisabled });
       const createdEntry = await disableEntry.save();
+      AdminLogEvent(req.body.adminId,'None','Enable/Disable Extras','Success',"Successfully Enable Or Disable ("+createdEntry.type+") ","None")
       return res.status(statusCode.accepted).json(createdEntry);
     }
+      AdminLogEvent(req.body.adminId,'None','Enable/Disable Extras','Success',"Successfully Enable Or Disable ("+type+") ","None")
   } catch (error) {
     console.error("Error in createOrUpdate:", error);
     throw new ErrorResponse("Failed to create or update entry", 500);

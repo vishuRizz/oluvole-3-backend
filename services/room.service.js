@@ -4,11 +4,18 @@ const {
 } = require("../middlewares/error/error");
 const { roomModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 const create = asyncErrorHandler(async (req, res) => {
+
   if (req.body.id.length > 0) {
+    let adminId = req.body.adminId
+
     let update = await roomModel.findByIdAndUpdate(req.body.id, req.body);
+    console.log("-0-0-0-",update)
     if (update) {
+            AdminLogEvent(adminId,'None','Update Price','Success',"Successfully Price Updated Of "+update.type+" ("+req.body.price+")",req.body?.id)
+
       res.status(statusCode.accepted).json(update);
     }
   } else {

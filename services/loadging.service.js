@@ -1,6 +1,7 @@
 const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
 const { loadginModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const {AdminLogEvent} = require("./adminLogs.service");
 
 
 const create = asyncErrorHandler(async(req,res)=>{
@@ -12,6 +13,7 @@ const create = asyncErrorHandler(async(req,res)=>{
         }
         let update = await loadginModel.findByIdAndUpdate(req.body.id,updatedBody)
         if(update){
+            AdminLogEvent(req.body.adminId,'None','Update Staff Loadging','Success','Successfully Updated Staff Loadging',update._id)
             res.status(statusCode.accepted).json(update)
         }
 
@@ -19,6 +21,7 @@ const create = asyncErrorHandler(async(req,res)=>{
     else{
         let create = await loadginModel.create(req.body)
         if(create){
+            AdminLogEvent(req.body.adminId,'None','Create Staff Loadging','Success','Successfully Created Staff Loadging',create._id)
             res.status(statusCode.accepted).json(create)
         }
         else{
