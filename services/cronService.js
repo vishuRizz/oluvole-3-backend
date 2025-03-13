@@ -211,3 +211,31 @@ const updateExpiredVouchers = async () => {
 
 // Schedule the task to run daily at midnight
 cron.schedule("0 0 * * *", updateExpiredVouchers);
+
+// Schedule the task to run every day at 12 noon for post-checkout emails
+cron.schedule("0 12 * * *", async () => {
+  try {
+    const today = formatDate(new Date());
+    const payments = await paymentModel.find({
+      "roomDetails.endDate": today,
+    });
+
+    payments.forEach((payment) => {
+      const guestDetails = JSON.parse(payment.guestDetails);
+      const emailContext = {
+        name: payment.name,
+      };
+
+      sendEmail(
+        guestDetails.email,
+        "Thanks for choosing Jara Beach Resort 🌴",
+        "post_checkout_email",
+        emailContext
+      );
+    });
+
+    console.log("Post Checkout Emails sent to users checking out today.");
+  } catch (error) {
+    console.error("Error sending post checkout emails:", error);
+  }
+});
