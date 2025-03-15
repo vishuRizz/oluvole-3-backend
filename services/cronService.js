@@ -215,12 +215,14 @@ cron.schedule("0 0 * * *", updateExpiredVouchers);
 // Schedule the task to run every day at 12 noon for post-checkout emails
 cron.schedule("0 12 * * *", async () => {
   try {
-    const today = formatDate(new Date());
-    const payments = await paymentModel.find({
-      "roomDetails.endDate": today,
+    const today = new Date().toISOString().split("T")[0];
+    const payments = await paymentModel.find({ status: "Success" });
+    // Filter payments based on the endDate inside the roomDetails JSON
+    const filteredPayments = payments.filter((payment) => {
+      return JSON.parse(payment.roomDetails)?.endDate === today; // Check if the endDate matches
     });
 
-    payments.forEach((payment) => {
+    filteredPayments.forEach((payment) => {
       const guestDetails = JSON.parse(payment.guestDetails);
       const emailContext = {
         name: payment.name,
