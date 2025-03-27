@@ -40,7 +40,7 @@ const blockedRoomRoute = require("./blockedRoom.router");
 const peakOffSeasonalRoute = require("./peakOffSeasonal.router");
 const carServiceRoute = require("./carService.router");
 const adminLogsRoutes = require("./adminLogs.router");
-
+const club100Route = require("./club100");
 
 allRoutes.use("/admin", accountRoute);
 allRoutes.use("/guest", guestRoute);
@@ -54,6 +54,7 @@ allRoutes.use("/payment", paymentRoute);
 allRoutes.use("/payment/paystack", paymentRoutes);
 allRoutes.use("/overnight/booking", overnightBookingRoute);
 allRoutes.use("/daypass/booking", daypassBookingRoute);
+allRoutes.use("/club100", club100Route);
 
 // SETTINGS
 allRoutes.use("/terms/condition", termRoute);
