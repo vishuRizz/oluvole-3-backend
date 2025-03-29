@@ -43,6 +43,23 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
   }
 });
 
+// Validate a Club100 member
+const validateClubMember = asyncErrorHandler(async (req, res) => {
+  const { clubID, email } = req.body;
+  const member = await clubModel.findOne({ clubID, email });
+  if (!member) {
+    throw new ErrorResponse("Club100 Member not found", 404);
+  }
+  res.status(200).json({
+    message: "Club100 Member validated successfully.",
+    percentage: {
+      peakDiscount: 10,
+      offPeakDiscount: 20,
+    },
+  });
+});
+
 module.exports = {
   registerClubMember,
+  validateClubMember,
 };
