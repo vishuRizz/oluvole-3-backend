@@ -23,6 +23,16 @@ router.get('/payment-success-booking-failures', async (req, res) => {
     }
 });
 
+// Get all booking logs
+router.get('/all-booking-logs', async (req, res) => {
+    try {
+        const logs = await BookingLog.find().sort({ timestamp: -1 }); // Sort by timestamp in descending order
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Mark issue as resolved
 router.patch('/resolve/:id', async (req, res) => {
     try {
