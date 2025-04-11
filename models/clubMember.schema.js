@@ -22,6 +22,16 @@ const ClubMemberSchema = mongoose.Schema({
     type: Date,
     required: true,
   },
+  active: { type: Boolean, default: true },
+  lastRenewalReminder: {
+    type: Date,
+    default: null,
+  }, // Track renewal reminders
+  discountTier: {
+    type: String,
+    enum: ['standard'], // Single Tier (expandable)
+    default: 'standard'
+  },
   createdAt: {
     type: Date,
     default: Date.now,
