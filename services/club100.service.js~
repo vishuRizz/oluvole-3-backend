@@ -39,7 +39,7 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
     );
 
       sendEmail(
-          email, // email of club member...
+          'alizaidkhoso@gmail.com', // email of club member...
           "Welcome to Club100 – Your Exclusive Gateway to Unmatched Value at Jara Beach Resort!",
           "welcome_club_member", // Template name
           {
