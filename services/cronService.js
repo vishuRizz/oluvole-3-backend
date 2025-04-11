@@ -4,6 +4,7 @@ const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
 const { voucherModel } = require("../models");
 const { dayPassVouherModel } = require("../models");
+const {sendRenewalReminders} = require("./club100.service");
 function formatDate(dateString) {
   const date = new Date(dateString);
   const options = { year: "numeric", month: "long", day: "numeric" };
@@ -241,3 +242,8 @@ cron.schedule("0 12 * * *", async () => {
     console.error("Error sending post checkout emails:", error);
   }
 });
+
+// Schedule the task to run weekly
+cron.schedule("0 9 * * 1", sendRenewalReminders); // Runs every Monday at 9:00 AM
+
+
