@@ -1,4 +1,4 @@
-const { AdminLogEvent } = require("./adminLogs.service");
+const { AdminLogEvent } = require("./adminLogs.service.js");
 const {
   ErrorResponse,
   asyncErrorHandler,
@@ -20,7 +20,8 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
       "Club100 Member Already exist",
       "None"
     );
-    throw new ErrorResponse("Club100 Member Already Exits", 400);
+    return res.status(201).send({ success: false, message: "Club100 Member Already Exits." });
+    // throw new ErrorResponse("Club100 Member Already Exits", 400);
   } else {
     const registerMember = await clubModel.create({
       name,
@@ -48,9 +49,7 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
           }
       );
 
-    res
-      .status(201)
-      .send({ message: "Club100 Member registered successfully." });
+    res.status(201).send({ success: true, message: "Club100 Member registered successfully." });
   }
 });
 
@@ -108,7 +107,7 @@ const updateClubMembers = asyncErrorHandler(async (req, res) => {
 });
 
 // Function to send renewal reminders
-export const sendRenewalReminders = async () => {
+const sendRenewalReminders = async () => {
     try {
         const now = new Date();
         const twoMonthsFromNow = new Date();
@@ -152,5 +151,6 @@ module.exports = {
   registerClubMember,
   validateClubMember,
   getClubMembers,
-  updateClubMembers
+  updateClubMembers,
+  sendRenewalReminders
 };
