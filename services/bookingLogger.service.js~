@@ -1,0 +1,68 @@
+const BookingLog = require('../models/bookingLog.schema');
+
+class BookingLogger {
+    static async logBookingAttempt(bookingData) {
+        try {
+            const logEntry = new BookingLog({
+                bookingId: bookingData.bookingId,
+                userId: bookingData.userId,
+                status: bookingData.status,
+                paymentStatus: bookingData.paymentStatus,
+                paymentGateway: bookingData.paymentGateway,
+                paymentId: bookingData.paymentId,
+                amount: bookingData.amount,
+                currency: bookingData.currency,
+                bookingDetails: bookingData.bookingDetails,
+                errorDetails: bookingData.errorDetails,
+                requestPayload: bookingData.requestPayload,
+                responsePayload: bookingData.responsePayload,
+                ipAddress: bookingData.ipAddress,
+                userAgent: bookingData.userAgent
+            });
+
+            await logEntry.save();
+            return logEntry;
+        } catch (error) {
+            console.error('Failed to log booking attempt:', error);
+            throw error;
+        }
+    }
+
+    static async logPaymentSuccessBookingFailure(paymentData, bookingError) {
+        try {
+            const logEntry = new BookingLog({
+                bookingId: paymentData.bookingId,
+                userId: paymentData.userId,
+                status: 'payment_success_booking_failed',
+                paymentStatus: 'success',
+                paymentGateway: paymentData.paymentGateway,
+                paymentId: paymentData.paymentId,
+                amount: paymentData.amount,
+                currency: paymentData.currency,
+                errorDetails: {
+                    errorCode: bookingError.code || 'UNKNOWN',
+                    errorMessage: bookingError.message,
+                    stackTrace: bookingError.stack,
+                    failedStep: 'booking_creation'
+                },
+                ipAddress: paymentData.ipAddress,
+                userAgent: paymentData.userAgent
+            });
+
+            await logEntry.save();
+            return logEntry;
+        } catch (error) {
+            console.error('Failed to log payment success/booking failure:', error);
+            throw error;
+        }
+    }
+
+    static async getFailedBookingsWithSuccessfulPayments() {
+        return BookingLog.find({
+            status: 'payment_success_booking_failed',
+            resolved: false
+        }).sort({ timestamp: -1 });
+    }
+}
+
+module.exports = BookingLogger;
