@@ -163,6 +163,5 @@ module.exports = {
   validateClubMember,
   getClubMembers,
   updateClubMembers,
-  sendRenewalReminders,
-  deleteClubMember
+  sendRenewalReminders
 };
