@@ -80,7 +80,7 @@ const create = asyncErrorHandler(async (req, res) => {
       bookingId: createDaypass._id,
       userId: guestDetails.email,
       status: "success",
-      paymentStatus: 'success',
+      paymentStatus: createDaypass.status ? createDaypass.status?.toLowerCase() : 'success',
       paymentGateway: "Paystack",
       paymentId: createDaypass.paymentId,
       amount: createDaypass.amount,
