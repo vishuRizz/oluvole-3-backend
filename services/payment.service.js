@@ -75,22 +75,6 @@ const create = asyncErrorHandler(async (req, res) => {
       bookingInfo?.childTotal;
     let createDaypass = await paymentModel.create(req.body);
 
-    // Log booking creation
-    await BookingLog.create({
-      bookingId: createDaypass._id,
-      userId: guestDetails.email,
-      status: "success",
-      paymentStatus: 'success',
-      paymentGateway: "Paystack",
-      paymentId: createDaypass.paymentId,
-      amount: createDaypass.amount,
-      currency: createDaypass.currency,
-      bookingDetails: req.body,
-      requestPayload: req.body,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-
     //GENERATE LOYALTY POINTS========
     try {
       let amount = createDaypass.amount
@@ -124,6 +108,21 @@ const create = asyncErrorHandler(async (req, res) => {
     if (createDaypass) {
       logger.info("Payment successfully created", {
         payment: createDaypass._id,
+      });
+      // Log booking creation success
+      await BookingLog.create({
+        bookingId: createDaypass._id,
+        userId: guestDetails.email,
+        status: "success",
+        paymentStatus: 'success',
+        paymentGateway: "Paystack",
+        paymentId: createDaypass.paymentId,
+        amount: createDaypass.amount,
+        currency: createDaypass.currency,
+        bookingDetails: req.body,
+        requestPayload: req.body,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
       });
       res.status(statusCode.accepted).json(createDaypass);
       const emailContext = {
@@ -211,7 +210,8 @@ const create = asyncErrorHandler(async (req, res) => {
           "pending_payment",
           emailContext
         );
-      } else if (req.body.status === "Success") {
+      }
+      else if (req.body.status === "Success") {
         sendEmail(
           guestDetails.email,
           "Your Booking Is Confirmed",
@@ -226,28 +226,28 @@ const create = asyncErrorHandler(async (req, res) => {
         );
       }
     } else {
+      // Log booking failure
+      await BookingLog.create({
+        bookingId: req.body.ref,
+        userId: req.body.guestDetails ? JSON.parse(req.body.guestDetails).email : "Unknown",
+        status: "failed",
+        paymentStatus: "failed",
+        paymentGateway: "Paystack",
+        errorDetails: {
+          errorMessage: error.message,
+          stackTrace: error.stack,
+          failedStep: "Payment Creation"
+        },
+        requestPayload: req.body,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
       throw new ErrorResponse("Failed To Create Payment", 404);
     }
   } catch (error) {
     logger.error("Error during payment creation", {
       error: error.message,
       stack: error.stack,
-    });
-    // Log booking failure
-    await BookingLog.create({
-      bookingId: req.body.ref,
-      userId: req.body.guestDetails ? JSON.parse(req.body.guestDetails).email : "Unknown",
-      status: "failed",
-      paymentStatus: "failed",
-      paymentGateway: "Paystack",
-      errorDetails: {
-        errorMessage: error.message,
-        stackTrace: error.stack,
-        failedStep: "Payment Creation"
-      },
-      requestPayload: req.body,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
     });
     throw new ErrorResponse("Failed To Create Payment", 404);
   }

@@ -6,10 +6,13 @@ const BookingLogSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now },
     status: {
         type: String,
-        enum: ['success', 'failed', 'incomplete', 'payment_success_booking_failed'],
+        // enum: ['success', 'failed', 'incomplete', 'payment_success_booking_failed'],
         required: true
     },
-    paymentStatus: { type: String, enum: ['success', 'failed', 'pending', 'refunded'] },
+    paymentStatus: {
+        type: String,
+        // enum: ['success', 'failed', 'pending', 'refunded']
+    },
     paymentGateway: String,
     paymentId: String,
     amount: Number,
