@@ -14,12 +14,11 @@ const getAllBlockedRooms = asyncErrorHandler(async (req, res) => {
 });
 
 const createBlockedRoom = asyncErrorHandler(async (req, res) => {
-  const { roomId, roomTitle, date, description } = req.body;
+  const { roomId, roomTitle, date, description, staffName, additionalInfo } = req.body;
   const newSeasonalDate = new BlockedRoom({
-    roomId,
-    roomTitle,
-    date,
-    description,
+    roomId, roomTitle,
+    date, description,
+    staffName, additionalInfo
   });
   await newSeasonalDate.save();
   if (newSeasonalDate) {

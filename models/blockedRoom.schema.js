@@ -17,5 +17,13 @@ const BlockedRoom = new mongoose.Schema({
     type: String,
     required: true,
   },
+  staffName: {
+    type: String,
+    required: true,
+  },
+  additionalInfo: {
+    type: String,
+    required: false,
+  },
 });
 module.exports = mongoose.model("BlockedRoom", BlockedRoom);
