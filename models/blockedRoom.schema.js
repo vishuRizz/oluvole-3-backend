@@ -25,5 +25,29 @@ const BlockedRoom = new mongoose.Schema({
     type: String,
     required: false,
   },
+  arrivalDate: {
+    type: Date,
+    required: false,
+  },
+  departureDate: {
+    type: Date,
+    required: false,
+  },
+  group: {
+    type: String,
+    required: false,
+  },
+  rooms: {
+    type: Number,
+    required: false,
+  },
+  guestName: {
+    type: String,
+    required: false,
+  },
+  notes: {
+    type: String,
+    required: false,
+  },
 });
 module.exports = mongoose.model("BlockedRoom", BlockedRoom);
