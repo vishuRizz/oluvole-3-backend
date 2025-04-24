@@ -19,26 +19,11 @@ const createBlockedRoom = asyncErrorHandler(async (req, res) => {
     arrivalDate, departureDate, group, rooms, guestName, notes,
   } = req.body;
 
-  const newBlockedRoomData = {
-    roomId,
-    roomTitle,
-    date,
-    description,
-    staffName,
-    additionalInfo,
-  };
-
-  // Add additional fields if the description is "Guest Booking (Manual)"
-  if (description === "Guest Booking (Manual)") {
-    newBlockedRoomData.arrivalDate = arrivalDate;
-    newBlockedRoomData.departureDate = departureDate;
-    newBlockedRoomData.group = group;
-    newBlockedRoomData.rooms = rooms;
-    newBlockedRoomData.guestName = guestName;
-    newBlockedRoomData.notes = notes;
-  }
-
-  const newSeasonalDate = new BlockedRoom(newBlockedRoomData);
+  const newSeasonalDate = new BlockedRoom({
+    roomId, roomTitle,
+    date, description,
+    staffName, additionalInfo
+  });
   await newSeasonalDate.save();
   if (newSeasonalDate) {
     res.status(201).json(newSeasonalDate);
