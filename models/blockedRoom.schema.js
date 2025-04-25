@@ -27,10 +27,12 @@ const BlockedRoom = new mongoose.Schema({
   },
   arrivalDate: {
     type: Date,
+    default: null,
     required: false,
   },
   departureDate: {
     type: Date,
+    default: null,
     required: false,
   },
   group: {
