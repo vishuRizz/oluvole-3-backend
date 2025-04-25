@@ -8,10 +8,6 @@ const connectDatabase = require("./connection/database");
 const { errorMiddleware, ErrorResponse } = require("./middlewares/error/error");
 const { statusCode } = require("./utils/statusCode");
 const { allRoutes } = require("./routes");
-const { termModel } = require("./models");
-const { any } = require("joi");
-const { RoomTypes, SubRooms } = require("./models/rooms.schema");
-const { overnightBooking } = require("./models/overnight.booking.schema");
 const app = express();
 const port = 4000 || 4001;
 connectDatabase();
@@ -43,7 +39,7 @@ app.get("/test-error", (req, res) => {
     res.status(500).send("Test error triggered");
   }
 });
-// INAVLID API CALL
+// INVALID API CALLs
 app.use((req, res, next) => {
   next(new ErrorResponse("Invalid Api", statusCode?.notFound));
 });
