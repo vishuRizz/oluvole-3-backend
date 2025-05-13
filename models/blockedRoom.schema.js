@@ -51,5 +51,18 @@ const BlockedRoom = new mongoose.Schema({
     type: String,
     required: false,
   },
+  guestEmail: {
+    type: String,
+    required: false,
+  },
+  guestPaymentAmount: {
+    type: String,
+    required: false,
+  },
+  guestPaymentMethod: {
+    type: String,
+    required: false,
+  },
+  
 });
 module.exports = mongoose.model("BlockedRoom", BlockedRoom);

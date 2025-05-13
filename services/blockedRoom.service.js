@@ -3,6 +3,8 @@ const {
   asyncErrorHandler,
   ErrorResponse,
 } = require("../middlewares/error/error");
+const { sendEmail } = require("../config/mail.config");
+const logger = require("../utils/logger");
 
 const getAllBlockedRooms = asyncErrorHandler(async (req, res) => {
   const seasonalDates = await BlockedRoom.find({});
@@ -17,6 +19,7 @@ const createBlockedRoom = asyncErrorHandler(async (req, res) => {
   const {
     roomId, roomTitle, date, description, staffName, additionalInfo,
     arrivalDate, departureDate, group, rooms, guestName, notes,
+    guestEmail, guestPaymentAmount, guestPaymentMethod
   } = req.body;
 
   const newBlockedRoomData = {
@@ -31,8 +34,61 @@ const createBlockedRoom = asyncErrorHandler(async (req, res) => {
     group: group || '',
     rooms: rooms || 0,
     guestName: guestName || '',
-    notes: notes || ''
+    notes: notes || '',
+    guestEmail: guestEmail || '',
+    guestPaymentAmount: guestPaymentAmount || '',
+    guestPaymentMethod: guestPaymentMethod || ''
   };
+
+  if(description === 'Guest Booking (Manual)'){
+    try {
+      const emailContext = {
+        name: guestName,
+        email: guestEmail,
+        id: roomId,
+        bookingType: roomTitle,
+        checkIn: arrivalDate ? `${new Date(arrivalDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}, (2pm)` : '',
+        checkOut: departureDate ? `${new Date(departureDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}, (11am)` : '',
+        numberOfGuests: group || 'Not specified',
+        numberOfNights: arrivalDate && departureDate ? Math.floor((new Date(departureDate) - new Date(arrivalDate)) / (1000 * 60 * 60 * 24)) : 'Not specified',
+        extras: 'No Extras',
+        subTotal: guestPaymentAmount ? Number(guestPaymentAmount).toLocaleString() : '0',
+        multiNightDiscount: '0',
+        clubMemberDiscount: '0',
+        multiNightDiscountAvailable: 0,
+        vat: guestPaymentAmount ? (Number(guestPaymentAmount) * 0.125).toLocaleString() : '0',
+        totalCost: guestPaymentAmount ? Number(guestPaymentAmount).toLocaleString() : '0',
+        roomsPrice: guestPaymentAmount ? Number(guestPaymentAmount).toLocaleString() : '0',
+        extrasPrice: '0',
+        roomsDiscount: '0',
+        discountApplied: 'No',
+        voucherApplied: 'No',
+        priceAfterVoucher: guestPaymentAmount ? Number(guestPaymentAmount).toLocaleString() : '0',
+        priceAfterDiscount: guestPaymentAmount ? Number(guestPaymentAmount).toLocaleString() : '0',
+        totalGuests: group || 'Not specified'
+      };
+
+      await sendEmail(
+        guestEmail,
+        "Your Booking Is Confirmed",
+        "confirmation",
+        emailContext
+      );
+      await sendEmail(
+        "bookings@jarabeachresort.com",
+        "New Booking Confirmed",
+        "confirmation",
+        emailContext
+      );
+      logger.info("Confirmation emails sent for manual booking", { guestEmail, roomId });
+    } catch (emailError) {
+      logger.error("Failed to send confirmation emails for manual booking", {
+        error: emailError.message,
+        guestEmail,
+        roomId
+      });
+    }
+  }
 
   const newSeasonalDate = new BlockedRoom(newBlockedRoomData);
   await newSeasonalDate.save();
