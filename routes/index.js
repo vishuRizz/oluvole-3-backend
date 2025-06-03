@@ -23,6 +23,8 @@ const optionRoute = require("./option.router");
 const personalRoute = require("./personal.router");
 const drinkRoute = require("./drink.router");
 const ridingRoute = require("../services/riding.router");
+const gamingRoute = require("../services/gaming.router");
+
 const unforgettableExperiencesRoute = require("./unforgettableExperiences.router");
 const domesticStaffRoute = require("./domesticStaff.router");
 const roomDecorationRoute = require("./roomDecoration.router");
@@ -70,6 +72,7 @@ allRoutes.use("/cake", cakeRoute);
 allRoutes.use("/option", optionRoute);
 allRoutes.use("/personal", personalRoute);
 allRoutes.use("/riding", ridingRoute);
+allRoutes.use("/gaming", gamingRoute);
 allRoutes.use("/drink", drinkRoute);
 allRoutes.use("/unforgettableExp", unforgettableExperiencesRoute);
 allRoutes.use("/domesticStaff", domesticStaffRoute);

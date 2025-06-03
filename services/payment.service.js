@@ -9,6 +9,7 @@ const { statusCode } = require("../utils/statusCode");
 const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
 const BookingLog = require('../models/bookingLog.schema.js');
+const BookingLogger = require('../services/bookingLogger.service');
 
 function formatDate(dateString) {
   const date = new Date(dateString);
@@ -51,6 +52,7 @@ const counting = (guestCount) => {
 };
 
 const create = asyncErrorHandler(async (req, res) => {
+  let createDaypass;
   try {
     logger.info("Processing payment request", { requestBody: req.body });
     const guestDetails = JSON.parse(req.body.guestDetails);
@@ -75,39 +77,47 @@ const create = asyncErrorHandler(async (req, res) => {
       bookingInfo?.childTotal;
 
     // Create payment record
-    let createDaypass = await paymentModel.create(req.body);
+    createDaypass = await paymentModel.create(req.body);
     
     if (!createDaypass) {
       logger.error("Failed to create payment record");
       throw new ErrorResponse("Failed To Create Payment", 404);
     }
 
-    // Create booking log
+    // Create booking log for successful payment
     try {
-      await BookingLog.create({
+      await BookingLogger.logBookingAttempt({
         bookingId: createDaypass._id,
         userId: guestDetails.email,
-        status: createDaypass.status === "Success" ? "success" : "pending",
-        paymentStatus: createDaypass.status === "Success" ? "success" : "pending",
-        paymentGateway: "Paystack",
+        status: "success", // Assuming payment success means booking attempt is successful
+        paymentStatus: "success",
+        paymentGateway: "Paystack", // Or paymentGateway from req.body if available
         paymentId: createDaypass.paymentId,
         amount: createDaypass.amount,
         currency: createDaypass.currency,
-        bookingDetails: req.body,
+        bookingDetails: req.body, // Log the raw request body for details
         requestPayload: req.body,
         ipAddress: req.ip || 'Unknown',
         userAgent: req.get('User-Agent') || 'Unknown'
       });
-      logger.info("Booking log created successfully", { bookingId: createDaypass._id });
+      logger.info("Successful payment booking log created", { bookingId: createDaypass._id });
     } catch (bookingLogError) {
-      logger.error("Failed to create booking log", {
+      logger.error("Failed to create successful payment booking log", {
         error: bookingLogError.message,
         paymentId: createDaypass._id
       });
-      // Continue execution even if booking log fails
+      // Log payment success but booking failure using the dedicated service
+      try {
+          await BookingLogger.logPaymentSuccessBookingFailure(createDaypass, bookingLogError);
+          logger.info("Logged payment success, booking failed", { paymentId: createDaypass._id });
+      } catch (logError) {
+          logger.error("Failed to log payment success/booking failure", { originalError: bookingLogError.message, loggingError: logError.message });
+      }
+      // Throw error to indicate booking process failed despite payment success
+      throw new ErrorResponse("Payment successful but booking failed", 500);
     }
 
-    // Generate loyalty points
+    // Generate loyalty points (keep in try catch as before, but ensure it doesn't prevent response if it fails)
     try {
       let amount = createDaypass.amount;
       let email = guestDetails.email;
@@ -137,7 +147,7 @@ const create = asyncErrorHandler(async (req, res) => {
       // Continue execution even if loyalty points generation fails
     }
 
-    // Send emails
+    // Send emails (keep in try catch as before)
     const emailContext = {
       name: req.body.name,
       email: guestDetails.email,
@@ -175,23 +185,23 @@ const create = asyncErrorHandler(async (req, res) => {
           : roomDetails?.startDate && roomDetails?.extras
             ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
             : "No Extras",
-      subTotal: formatPrice(req.body.subTotal),
-      multiNightDiscount: req.body.discount.toLocaleString(),
-      clubMemberDiscount: req.body.voucher,
+      subTotal: formatPrice(req.body.subTotal), // Use req.body as original
+      multiNightDiscount: req.body.discount.toLocaleString(), // Use req.body as original
+      clubMemberDiscount: req.body.voucher, // Use req.body as original
       multiNightDiscountAvailable: req.body.multiNightDiscount
         ? req.body.multiNightDiscount
         : 0,
-      vat: formatPrice(req.body.vat),
-      totalCost: formatPrice(req.body.totalCost),
+      vat: formatPrice(req.body.vat), // Use req.body as original
+      totalCost: formatPrice(req.body.totalCost), // Use req.body as original
       roomsPrice:
         req.body.roomsPrice == "Daypass"
           ? req.body.roomsPrice
-          : formatPrice(req.body.roomsPrice),
-      extrasPrice: formatPrice(req.body.extrasPrice),
+          : formatPrice(req.body.roomsPrice), // Use req.body as original
+      extrasPrice: formatPrice(req.body.extrasPrice), // Use req.body as original
       roomsDiscount:
         req.body.roomsDiscount == "Daypass"
           ? req.body.roomsDiscount
-          : formatPrice(req.body.roomsDiscount),
+          : formatPrice(req.body.roomsDiscount), // Use req.body as original
       discountApplied: req.body.discountApplied
         ? req.body.discountApplied == "true"
           ? "Yes"
@@ -204,22 +214,22 @@ const create = asyncErrorHandler(async (req, res) => {
         : "",
       priceAfterVoucher: req.body.priceAfterVoucher
         ? formatPrice(req.body.priceAfterVoucher)
-        : formatPrice(req.body.subTotal),
+        : formatPrice(req.body.subTotal), // Use req.body as original
       priceAfterDiscount: req.body.priceAfterDiscount
         ? formatPrice(req.body.priceAfterDiscount)
-        : formatPrice(req.body.subTotal),
+        : formatPrice(req.body.subTotal), // Use req.body as original
       totalGuests: totalGuests,
     };
 
     try {
       if (req.body.status === "Pending") {
-        sendEmail(
+        await sendEmail(
           guestDetails.email,
           "Your Booking Is Pending",
           "pending_payment",
           emailContext
         );
-        sendEmail(
+        await sendEmail(
           "bookings@jarabeachresort.com",
           "New Booking Pending",
           "pending_payment",
@@ -227,13 +237,13 @@ const create = asyncErrorHandler(async (req, res) => {
         );
       }
       else if (req.body.status === "Success") {
-        sendEmail(
+        await sendEmail(
           guestDetails.email,
           "Your Booking Is Confirmed",
           "confirmation",
           emailContext
         );
-        sendEmail(
+        await sendEmail(
           "bookings@jarabeachresort.com",
           "New Booking Confirmed",
           "confirmation",
@@ -245,39 +255,45 @@ const create = asyncErrorHandler(async (req, res) => {
       // Continue execution even if email sending fails
     }
 
+    // Only send success response if booking log was created successfully
     res.status(statusCode.accepted).json(createDaypass);
 
   } catch (error) {
-    logger.error("Error during payment creation", {
+    logger.error("Error during payment creation or subsequent process", {
       error: error.message,
       stack: error.stack,
+      paymentId: createDaypass?._id || 'N/A' // Log payment ID if available
     });
 
-    // Create failed booking log
-    try {
-      await BookingLog.create({
-        bookingId: req.body.ref,
-        userId: req.body.guestDetails ? JSON.parse(req.body.guestDetails).email : "Unknown",
-        status: "failed",
-        paymentStatus: "failed",
-        paymentGateway: "Paystack",
-        errorDetails: {
-          errorMessage: error.message,
-          stackTrace: error.stack,
-          failedStep: "Payment Creation"
-        },
-        requestPayload: req.body,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-      });
-    } catch (bookingLogError) {
-      logger.error("Failed to create failed booking log", {
-        error: bookingLogError.message,
-        originalError: error.message
-      });
+    // Log failed booking process if not already logged as payment success/booking failure
+    if (error.message !== "Payment successful but booking failed") {
+         try {
+              await BookingLogger.logBookingAttempt({
+                bookingId: req.body.ref || 'N/A', // Use ref or N/A
+                userId: req.body.guestDetails ? JSON.parse(req.body.guestDetails).email : "Unknown",
+                status: "failed",
+                paymentStatus: createDaypass?.status || "failed",
+                paymentGateway: "Paystack",
+                paymentId: createDaypass?.paymentId || 'N/A',
+                amount: createDaypass?.amount || req.body.amount || 0,
+                currency: createDaypass?.currency || req.body.currency || 'N/A',
+                errorDetails: {
+                  errorMessage: error.message,
+                  stackTrace: error.stack,
+                  failedStep: "Payment Processing"
+                },
+                requestPayload: req.body,
+                ipAddress: req.ip || 'Unknown',
+                userAgent: req.get('User-Agent') || 'Unknown'
+              });
+              logger.info("Logged general failed booking process", { bookingId: req.body.ref || 'N/A' });
+            } catch (logError) {
+              logger.error("Failed to create general failed booking log", { originalError: error.message, loggingError: logError.message });
+            }
     }
 
-    throw new ErrorResponse("Failed To Create Payment", 404);
+    // Re-throw the error after logging
+    throw error;
   }
 });
 
