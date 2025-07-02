@@ -1,5 +1,10 @@
 const squadApi = require('../config/squad');
 const BookingLogger = require('./bookingLogger.service');
+const { sendEmail } = require('../config/mail.config');
+const Payment = require('../models/payment.schema');
+const { overnightBooking } = require('../models/overnight.booking.schema');
+const { daypassBooking } = require('../models/overnight.booking.schema');
+const { nanoid } = require('nanoid');
 
 // Payments
 /**
@@ -116,7 +121,13 @@ async function initiatePayment(data) {
   }
 }
 
-async function verifyTransaction(reference) {
+async function verifyTransaction(reference, bookingDetails = null) {
+  console.log('=== SQUAD VERIFICATION START ===');
+  console.log('Reference:', reference);
+  console.log('BookingDetails received:', bookingDetails);
+  console.log('BookingDetails type:', typeof bookingDetails);
+  console.log('BookingDetails keys:', bookingDetails ? Object.keys(bookingDetails) : 'null');
+  
   if (!reference) {
     await BookingLogger.logBookingAttempt({
       bookingId: reference || 'N/A',
@@ -137,25 +148,187 @@ async function verifyTransaction(reference) {
   }
   try {
     const response = await squadApi.get(`/transaction/verify/${reference}`);
-    await BookingLogger.logBookingAttempt({
-      bookingId: reference,
-      userId: 'Unknown',
-      status: 'success',
-      paymentStatus: response.data?.data?.transaction_status || 'unknown',
-      paymentGateway: 'Squad',
-      paymentId: reference,
-      amount: response.data?.data?.transaction_amount || 0,
-      currency: response.data?.data?.transaction_currency_id || 'N/A',
-      bookingDetails: { reference },
-      requestPayload: { reference },
-      responsePayload: response.data,
-      ipAddress: 'Unknown',
-      userAgent: 'Unknown'
-    });
+    console.log("response", response);
+    // Always use naira for amount (divide by 100 if Squad returns kobo)
+    const transactionAmount = response.data?.data?.transaction_amount ? Number(response.data.data.transaction_amount) / 100 : 0;
+    let paymentStatus = response.data?.data?.transaction_status || 'unknown';
+    let paymentRecord = null;
+    // Always create payment record, regardless of status
+    if (bookingDetails) {
+      try {
+        paymentRecord = await Payment.create({
+          name: bookingDetails.name || '',
+          amount: transactionAmount, // Always naira
+          status: paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
+          ref: reference,
+          method: 'Squad',
+          guestDetails: bookingDetails.guestDetails ? JSON.stringify(bookingDetails.guestDetails) : '',
+          roomDetails: bookingDetails.roomDetails ? JSON.stringify(bookingDetails.roomDetails) : '',
+          bookingInfo: bookingDetails.bookingInfo ? JSON.stringify(bookingDetails.bookingInfo) : '',
+          subTotal: bookingDetails.subTotal || '',
+          vat: bookingDetails.vat || '',
+          totalCost: bookingDetails.totalCost || '',
+          discount: bookingDetails.discount || 0,
+          voucher: bookingDetails.voucher || 0,
+          multiNightDiscount: bookingDetails.multiNightDiscount || 0,
+          previousCost: bookingDetails.previousCost || 0,
+          previousPaymentStatus: bookingDetails.previousPaymentStatus || '',
+          roomsPrice: bookingDetails.roomsPrice || '',
+          extrasPrice: bookingDetails.extrasPrice || '',
+          roomsDiscount: bookingDetails.roomsDiscount || '',
+          discountApplied: bookingDetails.discountApplied || '',
+          voucherApplied: bookingDetails.voucherApplied || '',
+          priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
+          priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
+        });
+        if (!paymentRecord) {
+          console.error('Failed to create Squad payment record: No record returned');
+        }
+        
+        // Also create booking record in overnight.booking collection if it's an overnight booking
+        if (bookingDetails?.roomDetails) {
+          try {
+            console.log('Attempting to create booking record for Squad payment:', reference);
+            console.log('Payment status:', paymentStatus);
+            console.log('Booking details:', bookingDetails);
+            
+            // Handle both JSON strings and objects for roomDetails
+            let roomDetails;
+            if (typeof bookingDetails.roomDetails === 'string') {
+              roomDetails = JSON.parse(bookingDetails.roomDetails);
+            } else {
+              roomDetails = bookingDetails.roomDetails;
+            }
+            console.log('Parsed room details:', roomDetails);
+            
+            // Handle both JSON strings and objects for guestDetails
+            let guestDetails;
+            if (typeof bookingDetails.guestDetails === 'string') {
+              guestDetails = JSON.parse(bookingDetails.guestDetails);
+            } else {
+              guestDetails = bookingDetails.guestDetails;
+            }
+            console.log('Parsed guest details:', guestDetails);
+            
+            // Check if it's an overnight booking (has visitDate)
+            if (roomDetails?.visitDate) {
+              console.log('Detected overnight booking with visitDate:', roomDetails.visitDate);
+              const totalGuest = roomDetails?.selectedRooms?.[0]?.guestCount?.adults || 0;
+              
+              const bookingRecord = await overnightBooking.create({
+                totalGuest: totalGuest,
+                bookingDetails: roomDetails,
+                guestDetails: guestDetails,
+                shortId: reference, // Use the same reference as payment
+              });
+              console.log('Created overnight booking record for Squad payment:', reference, 'Record ID:', bookingRecord._id);
+            }
+            // Check if it's a daypass booking (has startDate)
+            else if (roomDetails?.startDate) {
+              console.log('Detected daypass booking with startDate:', roomDetails.startDate);
+              const totalGuest = roomDetails?.adultsCount || 0;
+              
+              const bookingRecord = await daypassBooking.create({
+                totalGuest: totalGuest,
+                bookingDetails: roomDetails,
+                guestDetails: guestDetails,
+                shortId: reference, // Use the same reference as payment
+              });
+              console.log('Created daypass booking record for Squad payment:', reference, 'Record ID:', bookingRecord._id);
+            } else {
+              console.log('No visitDate or startDate found in roomDetails, cannot determine booking type');
+              console.log('Available roomDetails keys:', Object.keys(roomDetails || {}));
+            }
+          } catch (bookingError) {
+            console.error('Failed to create booking record for Squad payment:', bookingError);
+            console.error('Error details:', bookingError.message);
+            console.error('Error stack:', bookingError.stack);
+          }
+        } else {
+          console.log('No roomDetails provided in bookingDetails, skipping booking record creation');
+          console.log('Available bookingDetails keys:', Object.keys(bookingDetails || {}));
+        }
+      } catch (paymentError) {
+        console.error('Failed to create Squad payment record:', paymentError);
+      }
+    }
+    // Log booking attempt with naira amount and correct status
+    try {
+      await BookingLogger.logBookingAttempt({
+        bookingId: reference,
+        userId: bookingDetails?.email || 'Unknown',
+        status: paymentStatus === 'success' ? 'success' : paymentStatus,
+        paymentStatus: paymentStatus,
+        paymentGateway: 'Squad',
+        paymentId: reference,
+        amount: transactionAmount, // Always naira
+        currency: response.data?.data?.transaction_currency_id || 'N/A',
+        bookingDetails: bookingDetails || { reference },
+        requestPayload: { reference },
+        responsePayload: response.data,
+        ipAddress: 'Unknown',
+        userAgent: 'Unknown'
+      });
+    } catch (bookingLogError) {
+      // If payment was successful but booking log failed, log this special case
+      if (paymentStatus === 'success' && paymentRecord) {
+        try {
+          await BookingLogger.logPaymentSuccessBookingFailure(paymentRecord, bookingLogError);
+          console.info('Logged payment success, booking failed (Squad)', { paymentId: paymentRecord._id });
+        } catch (logError) {
+          console.error('Failed to log payment success/booking failure (Squad)', { originalError: bookingLogError.message, loggingError: logError.message });
+        }
+      }
+      // Optionally, rethrow or handle the error as needed
+    }
+    // Send confirmation emails if payment is successful
+    if (paymentStatus === 'success' && bookingDetails) {
+      const emailContext = bookingDetails.emailContext || {
+        name: bookingDetails.name,
+        email: bookingDetails.email,
+        id: reference,
+        bookingType: bookingDetails.bookingType || '',
+        checkIn: bookingDetails.checkIn || '',
+        checkOut: bookingDetails.checkOut || '',
+        numberOfGuests: bookingDetails.numberOfGuests || '',
+        numberOfNights: bookingDetails.numberOfNights || '',
+        extras: bookingDetails.extras || '',
+        subTotal: bookingDetails.subTotal || '',
+        multiNightDiscount: bookingDetails.multiNightDiscount || '',
+        clubMemberDiscount: bookingDetails.clubMemberDiscount || '',
+        multiNightDiscountAvailable: bookingDetails.multiNightDiscountAvailable || '',
+        vat: bookingDetails.vat || '',
+        totalCost: bookingDetails.totalCost || '',
+        roomsPrice: bookingDetails.roomsPrice || '',
+        extrasPrice: bookingDetails.extrasPrice || '',
+        voucherApplied: bookingDetails.voucherApplied || '',
+        discountApplied: bookingDetails.discountApplied || '',
+        totalGuests: bookingDetails.totalGuests || '',
+        priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
+        priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
+      };
+      try {
+        await sendEmail(
+          bookingDetails.email,
+          'Your Booking Is Confirmed',
+          'confirmation',
+          emailContext
+        );
+        await sendEmail(
+          'bookings@jarabeachresort.com',
+          'New Booking Confirmed',
+          'confirmation',
+          emailContext
+        );
+      } catch (emailError) {
+        console.error('Failed to send Squad payment confirmation emails:', emailError);
+      }
+    }
     return {
       status: response.data.status,
       message: response.data.message,
-      data: response.data.data || null
+      data: response.data.data || null,
+      paymentRecord: paymentRecord || null
     };
   } catch (err) {
     await BookingLogger.logBookingAttempt({
