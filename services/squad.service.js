@@ -4,7 +4,9 @@ const { sendEmail } = require('../config/mail.config');
 const Payment = require('../models/payment.schema');
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const { daypassBooking } = require('../models/overnight.booking.schema');
-const { nanoid } = require('nanoid');
+// Replace: const { nanoid } = require('nanoid');
+// With dynamic import helper for nanoid
+const nanoid = async () => (await import('nanoid')).nanoid;
 const crypto = require('crypto');
 
 // Replace with your Squad secret key
