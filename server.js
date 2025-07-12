@@ -12,6 +12,15 @@ const app = express();
 const port = 4000 || 4001;
 connectDatabase();
 require("./services/cronService");
+
+// Add express.json with raw body capture for Squad webhook
+app.use("/api/v1/squad/webhook", express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
+// Use express.json for all other routes
 app.use(express.json());
 
 app.use(cors({ origin: "*" }));

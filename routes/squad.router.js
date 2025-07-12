@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const squadService = require('../services/squad.service');
+const { handleSquadWebhook } = require('../services/squad.service');
 
 // Initiate Payment
 router.post('/payments/initiate', async (req, res) => {
@@ -82,5 +83,8 @@ router.get('/debug/booking/:reference', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Squad payment webhook /squad/webhook
+router.post('/webhook', handleSquadWebhook);
 
 module.exports = router; 

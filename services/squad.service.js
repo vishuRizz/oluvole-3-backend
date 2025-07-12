@@ -5,6 +5,10 @@ const Payment = require('../models/payment.schema');
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const { daypassBooking } = require('../models/overnight.booking.schema');
 const { nanoid } = require('nanoid');
+const crypto = require('crypto');
+
+// Replace with your Squad secret key
+const SQUAD_SECRET = process.env.SQUAD_SECRET || 'YOUR_SQUAD_SECRET';
 
 // Payments
 /**
@@ -79,12 +83,12 @@ async function initiatePayment(data) {
   Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
   try {
     const response = await squadApi.post('/transaction/initiate', payload);
-    // Log success
+    // Log payment initiation (not success - payment is still pending)
     await BookingLogger.logBookingAttempt({
       bookingId: data.transaction_ref || 'N/A',
       userId: data.email || 'Unknown',
-      status: 'success',
-      paymentStatus: 'success',
+      status: 'pending',
+      paymentStatus: 'pending',
       paymentGateway: 'Squad',
       paymentId: response.data?.data?.transaction_ref || null,
       amount: data.amount,
@@ -128,6 +132,29 @@ async function verifyTransaction(reference, bookingDetails = null) {
   console.log('BookingDetails type:', typeof bookingDetails);
   console.log('BookingDetails keys:', bookingDetails ? Object.keys(bookingDetails) : 'null');
   
+  // Ensure these are always defined
+  let guestDetails = {};
+  let roomDetails = {};
+  let guestCount = {};
+  let costBreakDown = {};
+  let bookingType = '';
+  let Body = {};
+
+  if (bookingDetails) {
+    guestDetails = typeof bookingDetails.guestDetails === 'string'
+      ? JSON.parse(bookingDetails.guestDetails)
+      : bookingDetails.guestDetails || {};
+    roomDetails = typeof bookingDetails.roomDetails === 'string'
+      ? JSON.parse(bookingDetails.roomDetails)
+      : bookingDetails.roomDetails || {};
+    guestCount = bookingDetails.guestCount || {};
+    costBreakDown = bookingDetails.costBreakDown || {};
+    Body = bookingDetails; // fallback for email, etc.
+    // Determine booking type
+    if (roomDetails.visitDate) bookingType = 'overnight';
+    else if (roomDetails.startDate) bookingType = 'daypass';
+  }
+
   if (!reference) {
     await BookingLogger.logBookingAttempt({
       bookingId: reference || 'N/A',
@@ -184,37 +211,17 @@ async function verifyTransaction(reference, bookingDetails = null) {
         if (!paymentRecord) {
           console.error('Failed to create Squad payment record: No record returned');
         }
-        
         // Also create booking record in overnight.booking collection if it's an overnight booking
         if (bookingDetails?.roomDetails) {
           try {
             console.log('Attempting to create booking record for Squad payment:', reference);
             console.log('Payment status:', paymentStatus);
             console.log('Booking details:', bookingDetails);
-            
-            // Handle both JSON strings and objects for roomDetails
-            let roomDetails;
-            if (typeof bookingDetails.roomDetails === 'string') {
-              roomDetails = JSON.parse(bookingDetails.roomDetails);
-            } else {
-              roomDetails = bookingDetails.roomDetails;
-            }
-            console.log('Parsed room details:', roomDetails);
-            
-            // Handle both JSON strings and objects for guestDetails
-            let guestDetails;
-            if (typeof bookingDetails.guestDetails === 'string') {
-              guestDetails = JSON.parse(bookingDetails.guestDetails);
-            } else {
-              guestDetails = bookingDetails.guestDetails;
-            }
-            console.log('Parsed guest details:', guestDetails);
-            
+            // Already parsed roomDetails and guestDetails above
             // Check if it's an overnight booking (has visitDate)
             if (roomDetails?.visitDate) {
               console.log('Detected overnight booking with visitDate:', roomDetails.visitDate);
               const totalGuest = roomDetails?.selectedRooms?.[0]?.guestCount?.adults || 0;
-              
               const bookingRecord = await overnightBooking.create({
                 totalGuest: totalGuest,
                 bookingDetails: roomDetails,
@@ -227,7 +234,6 @@ async function verifyTransaction(reference, bookingDetails = null) {
             else if (roomDetails?.startDate) {
               console.log('Detected daypass booking with startDate:', roomDetails.startDate);
               const totalGuest = roomDetails?.adultsCount || 0;
-              
               const bookingRecord = await daypassBooking.create({
                 totalGuest: totalGuest,
                 bookingDetails: roomDetails,
@@ -281,48 +287,46 @@ async function verifyTransaction(reference, bookingDetails = null) {
       }
       // Optionally, rethrow or handle the error as needed
     }
-    // Send confirmation emails if payment is successful
-    if (paymentStatus === 'success' && bookingDetails) {
-      const emailContext = bookingDetails.emailContext || {
-        name: bookingDetails.name,
-        email: bookingDetails.email,
-        id: reference,
-        bookingType: bookingDetails.bookingType || '',
-        checkIn: bookingDetails.checkIn || '',
-        checkOut: bookingDetails.checkOut || '',
-        numberOfGuests: bookingDetails.numberOfGuests || '',
-        numberOfNights: bookingDetails.numberOfNights || '',
-        extras: bookingDetails.extras || '',
-        subTotal: bookingDetails.subTotal || '',
-        multiNightDiscount: bookingDetails.multiNightDiscount || '',
-        clubMemberDiscount: bookingDetails.clubMemberDiscount || '',
-        multiNightDiscountAvailable: bookingDetails.multiNightDiscountAvailable || '',
-        vat: bookingDetails.vat || '',
-        totalCost: bookingDetails.totalCost || '',
-        roomsPrice: bookingDetails.roomsPrice || '',
-        extrasPrice: bookingDetails.extrasPrice || '',
-        voucherApplied: bookingDetails.voucherApplied || '',
-        discountApplied: bookingDetails.discountApplied || '',
-        totalGuests: bookingDetails.totalGuests || '',
-        priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
-        priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
-      };
-      try {
-        await sendEmail(
-          bookingDetails.email,
-          'Your Booking Is Confirmed',
-          'confirmation',
-          emailContext
-        );
-        await sendEmail(
-          'bookings@jarabeachresort.com',
-          'New Booking Confirmed',
-          'confirmation',
-          emailContext
-        );
-      } catch (emailError) {
-        console.error('Failed to send Squad payment confirmation emails:', emailError);
-      }
+    // Send confirmation emails (always attempt, even if email is missing)
+    const emailContext = {
+      name: guestDetails.firstname || Body?.email || 'Guest',
+      email: Body?.email || 'unknown@unknown.com',
+      id: reference,
+      bookingType: bookingType || '',
+      checkIn: roomDetails.visitDate || roomDetails.startDate || '',
+      checkOut: roomDetails.endDate || '',
+      numberOfGuests: guestCount.adults || '',
+      numberOfNights: '',
+      extras: '',
+      subTotal: costBreakDown.RoomsPrice ? costBreakDown.RoomsPrice.toString() : '',
+      multiNightDiscount: costBreakDown.MultiNightDiscount ? costBreakDown.MultiNightDiscount.toString() : '',
+      clubMemberDiscount: '',
+      multiNightDiscountAvailable: '',
+      vat: costBreakDown.Vat ? costBreakDown.Vat.toString() : '',
+      totalCost: costBreakDown.TotalCost ? costBreakDown.TotalCost.toString() : '',
+      roomsPrice: costBreakDown.RoomsPrice ? costBreakDown.RoomsPrice.toString() : '',
+      extrasPrice: costBreakDown.ExtrasPrice ? costBreakDown.ExtrasPrice.toString() : '',
+      voucherApplied: costBreakDown.VoucherApplied || '',
+      discountApplied: costBreakDown.DiscountApplied || '',
+      totalGuests: guestCount.adults || '',
+      priceAfterVoucher: costBreakDown.PriceAfterVoucher || '',
+      priceAfterDiscount: costBreakDown.PriceAfterDiscount || ''
+    };
+    try {
+      await sendEmail(
+        Body.email || 'unknown@unknown.com',
+        'Your Booking Is Confirmed',
+        'confirmation',
+        emailContext
+      );
+      await sendEmail(
+        'bookings@jarabeachresort.com',
+        'New Booking Confirmed',
+        'confirmation',
+        emailContext
+      );
+    } catch (emailError) {
+      console.error('Failed to send Squad payment confirmation emails:', emailError);
     }
     return {
       status: response.data.status,
@@ -389,10 +393,100 @@ async function getAllTerminals({ page, perPage, location_id, sort_by, sort_by_di
   return response.data;
 }
 
+const handleSquadWebhook = async (req, res) => {
+  let reference = null;
+  let responsePayload = null;
+  
+  try {
+    // 1. Log incoming webhook
+    console.log('--- SQUAD WEBHOOK RECEIVED ---');
+    console.log('Body:', req.body);
+
+    // 2. Parse event and transaction status
+    const { Event, TransactionRef, Body } = req.body;
+    reference = Body?.transaction_ref || TransactionRef;
+    responsePayload = Body;
+    
+    // 3. Extract meta fields and construct bookingDetails like verifyTransaction expects
+    const meta = Body?.meta || {};
+    const guestDetails = meta.guestDetails || {};
+    const roomDetails = meta.roomDetails || {};
+    const guestCount = meta.guestCount || {};
+    const costBreakDown = meta.costBreakDown || {};
+    
+    // Construct bookingDetails object that matches what verifyTransaction expects
+    const bookingDetails = {
+      name: guestDetails.firstname || Body?.email || 'Unknown',
+      email: guestDetails.email || Body?.email || 'unknown@unknown.com',
+      guestDetails: guestDetails,
+      roomDetails: roomDetails,
+      bookingInfo: '',
+      subTotal: costBreakDown.RoomsPrice || '',
+      vat: costBreakDown.Vat || '',
+      totalCost: costBreakDown.TotalCost || '',
+      discount: costBreakDown.Discount || 0,
+      voucher: costBreakDown.Voucher || 0,
+      multiNightDiscount: costBreakDown.MultiNightDiscount || 0,
+      previousCost: costBreakDown.PreviousCost || 0,
+      previousPaymentStatus: costBreakDown.PreviousPaymentStatus || '',
+      roomsPrice: costBreakDown.RoomsPrice || '',
+      extrasPrice: costBreakDown.ExtrasPrice || '',
+      roomsDiscount: costBreakDown.RoomsDiscount || '',
+      discountApplied: costBreakDown.DiscountApplied || '',
+      voucherApplied: costBreakDown.VoucherApplied || '',
+      priceAfterVoucher: costBreakDown.PriceAfterVoucher || '',
+      priceAfterDiscount: costBreakDown.PriceAfterDiscount || ''
+    };
+
+    // 4. Use the existing verifyTransaction function with constructed bookingDetails
+    // verifyTransaction will handle all logging internally
+    const verificationResult = await verifyTransaction(reference, bookingDetails);
+    
+    // 5. Return success response
+    return res.status(200).json({ 
+      message: 'Webhook processed successfully',
+      verificationResult: verificationResult
+    });
+    
+  } catch (err) {
+    console.error('Squad webhook error:', err);
+    
+    // Only log if this is an error that occurred BEFORE calling verifyTransaction
+    // (like missing reference, invalid webhook format, etc.)
+    // If verifyTransaction was called and failed, it already logged the error
+    if (!reference) {
+      await BookingLogger.logBookingAttempt({
+        bookingId: reference || 'N/A',
+        userId: 'Unknown',
+        status: 'failed',
+        paymentStatus: 'failed',
+        paymentGateway: 'Squad',
+        paymentId: reference || null,
+        amount: 0,
+        currency: 'N/A',
+        errorDetails: { 
+          errorMessage: err.message, 
+          stackTrace: err.stack 
+        },
+        requestPayload: req.body,
+        responsePayload: responsePayload,
+        ipAddress: req.ip || 'Unknown',
+        userAgent: req.headers['user-agent'] || 'Unknown'
+      });
+    }
+    
+    return res.status(500).json({ 
+      message: 'Internal server error',
+      error: err.message 
+    });
+  }
+};
+
 module.exports = {
   initiatePayment,
   verifyTransaction,
   getAllTransactions,
   createTerminal,
   getAllTerminals,
+  handleSquadWebhook,
 }; 
