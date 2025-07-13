@@ -10,7 +10,7 @@ const logger = require("../utils/logger");
 const createBooking = asyncErrorHandler(async (req, res) => {
   try {
     console.log("coming details", req.body);
-    let { guestCount, guestDetails, roomDetails } = req.body;
+    let { guestCount, guestDetails, roomDetails, ref } = req.body;
     guestDetails = JSON.parse(guestDetails);
     roomDetails = JSON.parse(roomDetails);
     const file = req.file;
@@ -28,15 +28,17 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       photo: fileUrl,
     };
 
-    // Generate a short ID
-    // const shortId = shortid.generate(); // Generate a short unique ID
-    const { nanoid } = await import("nanoid");
+    let shortIdToUse = ref;
+    if (!shortIdToUse) {
+      const { nanoid } = await import("nanoid");
+      shortIdToUse = nanoid(8).toUpperCase();
+    }
 
     let create = await daypassBooking.create({
       totalGuest: guestCount,
       bookingDetails: roomDetails,
       guestDetails: updatedGuestDetails,
-      shortId: nanoid(8).toUpperCase(), // Store the short ID
+      shortId: shortIdToUse,
     });
 
     res.status(200).json(create);
@@ -58,10 +60,8 @@ const getAllBooking = asyncErrorHandler(async (req, res) => {
 
 const getBookingByRef = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
-
   // Attempt to find the booking by either _id or shortId
-  const booking = await daypassBooking.findOne({ shortId: ref }); // Allow fetching by either _id or shortId
-
+  const booking = await daypassBooking.findOne({ shortId: ref });
   if (!booking) {
     throw new ErrorResponse("Booking not found", 404);
   }

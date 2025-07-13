@@ -331,10 +331,27 @@ const deletByBookingId = asyncErrorHandler(async (req, res) => {
 
 const getByBookingId = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
+  
+  console.log("🔍 PAYMENT: getByBookingId called with id:", id);
+  console.log("🔍 PAYMENT: id type:", typeof id);
+  
   let daypass = await paymentModel.find({ ref: id });
+  
+  console.log("🔍 PAYMENT: Database query result:", daypass ? `${daypass.length} records found` : "No records found");
+  if (daypass && daypass.length > 0) {
+    console.log("✅ PAYMENT: Found payment records:", daypass.map(p => ({ id: p._id, ref: p.ref, status: p.status, method: p.method })));
+  } else {
+    console.log("❌ PAYMENT: No payment found with ref:", id);
+    // Let's also check if there are any payments with similar patterns
+    const allPayments = await paymentModel.find({}).limit(5);
+    console.log("🔍 PAYMENT: Sample of existing refs:", allPayments.map(p => p.ref));
+  }
+  
   if (daypass) {
+    console.log("✅ PAYMENT: Returning payment data for id:", id);
     res.status(statusCode.accepted).json(daypass);
   } else {
+    console.log("❌ PAYMENT: Throwing 404 error for id:", id);
     throw new ErrorResponse("No Payment Found", 404);
   }
 });

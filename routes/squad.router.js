@@ -61,30 +61,7 @@ router.get('/pos/terminals', async (req, res) => {
   }
 });
 
-// Debug endpoint to check booking records
-router.get('/debug/booking/:reference', async (req, res) => {
-  try {
-    const { reference } = req.params;
-    const { overnightBooking } = require('../models/overnight.booking.schema');
-    const { daypassBooking } = require('../models/overnight.booking.schema');
-    const Payment = require('../models/payment.schema');
-    
-    const paymentRecord = await Payment.findOne({ ref: reference });
-    const overnightRecord = await overnightBooking.findOne({ shortId: reference });
-    const daypassRecord = await daypassBooking.findOne({ shortId: reference });
-    
-    res.status(200).json({
-      reference,
-      paymentRecord: paymentRecord ? { id: paymentRecord._id, status: paymentRecord.status } : null,
-      overnightRecord: overnightRecord ? { id: overnightRecord._id, shortId: overnightRecord.shortId } : null,
-      daypassRecord: daypassRecord ? { id: daypassRecord._id, shortId: daypassRecord.shortId } : null,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Squad payment webhook /squad/webhook
 router.post('/webhook', handleSquadWebhook);
 
-module.exports = router; 
+module.exports = router;
