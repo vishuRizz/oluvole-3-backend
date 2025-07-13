@@ -129,10 +129,6 @@ async function initiatePayment(data) {
 
 async function verifyTransaction(reference, bookingDetails = null) {
   console.log('=== SQUAD VERIFICATION START ===');
-  console.log('Reference:', reference);
-  console.log('BookingDetails received:', bookingDetails);
-  console.log('BookingDetails type:', typeof bookingDetails);
-  console.log('BookingDetails keys:', bookingDetails ? Object.keys(bookingDetails) : 'null');
   
   // Ensure these are always defined
   let guestDetails = {};
@@ -184,6 +180,10 @@ async function verifyTransaction(reference, bookingDetails = null) {
     let paymentRecord = null;
     // Always create payment record, regardless of status
     if (bookingDetails) {
+      // If totalCost is missing or empty, set it to transactionAmount
+      if (!bookingDetails.totalCost || bookingDetails.totalCost === '' || bookingDetails.totalCost === 0) {
+        bookingDetails.totalCost = transactionAmount;
+      }
       try {
         paymentRecord = await Payment.create({
           name: bookingDetails.name || '',
@@ -196,7 +196,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
           bookingInfo: bookingDetails.bookingInfo ? JSON.stringify(bookingDetails.bookingInfo) : '',
           subTotal: bookingDetails.subTotal || '',
           vat: bookingDetails.vat || '',
-          totalCost: bookingDetails.totalCost || '',
+          totalCost: getField('totalCost', costBreakDown.totalCost) ? formatPrice(getField('totalCost', costBreakDown.totalCost)) : formatPrice(transactionAmount),
           discount: bookingDetails.discount || 0,
           voucher: bookingDetails.voucher || 0,
           multiNightDiscount: bookingDetails.multiNightDiscount || 0,
@@ -216,45 +216,50 @@ async function verifyTransaction(reference, bookingDetails = null) {
         // Also create booking record in overnight.booking collection if it's an overnight booking
         if (bookingDetails?.roomDetails) {
           try {
-            console.log('Attempting to create booking record for Squad payment:', reference);
-            console.log('Payment status:', paymentStatus);
-            console.log('Booking details:', bookingDetails);
+            
             // Already parsed roomDetails and guestDetails above
             // Check if it's an overnight booking (has visitDate)
             if (roomDetails?.visitDate) {
-              console.log('Detected overnight booking with visitDate:', roomDetails.visitDate);
               const totalGuest = roomDetails?.selectedRooms?.[0]?.guestCount?.adults || 0;
-              const bookingRecord = await overnightBooking.create({
+              
+              const bookingData = {
                 totalGuest: totalGuest,
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
-              });
-              console.log('Created overnight booking record for Squad payment:', reference, 'Record ID:', bookingRecord._id);
+              };
+              
+              const bookingRecord = await overnightBooking.create(bookingData);
             }
             // Check if it's a daypass booking (has startDate)
             else if (roomDetails?.startDate) {
-              console.log('Detected daypass booking with startDate:', roomDetails.startDate);
               const totalGuest = roomDetails?.adultsCount || 0;
-              const bookingRecord = await daypassBooking.create({
+              
+              const bookingData = {
                 totalGuest: totalGuest,
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
-              });
-              console.log('Created daypass booking record for Squad payment:', reference, 'Record ID:', bookingRecord._id);
+              };
+              
+              const bookingRecord = await daypassBooking.create(bookingData);
+              console.log('✅ SQUAD: Created daypass booking record for Squad payment:', reference, 'Record ID:', bookingRecord._id);
             } else {
-              console.log('No visitDate or startDate found in roomDetails, cannot determine booking type');
-              console.log('Available roomDetails keys:', Object.keys(roomDetails || {}));
+              console.log('❌ SQUAD: No visitDate or startDate found in roomDetails, cannot determine booking type');
+              console.log('❌ SQUAD: Available roomDetails keys:', Object.keys(roomDetails || {}));
+              console.log('❌ SQUAD: RoomDetails content:', JSON.stringify(roomDetails, null, 2));
             }
           } catch (bookingError) {
-            console.error('Failed to create booking record for Squad payment:', bookingError);
-            console.error('Error details:', bookingError.message);
-            console.error('Error stack:', bookingError.stack);
+            console.error('❌ SQUAD: Failed to create booking record for Squad payment:', bookingError);
+            console.error('❌ SQUAD: Error details:', bookingError.message);
+            console.error('❌ SQUAD: Error stack:', bookingError.stack);
+            console.error('❌ SQUAD: Error name:', bookingError.name);
+            console.error('❌ SQUAD: Error code:', bookingError.code);
           }
         } else {
-          console.log('No roomDetails provided in bookingDetails, skipping booking record creation');
-          console.log('Available bookingDetails keys:', Object.keys(bookingDetails || {}));
+          console.log('❌ SQUAD: No roomDetails provided in bookingDetails, skipping booking record creation');
+          console.log('❌ SQUAD: Available bookingDetails keys:', Object.keys(bookingDetails || {}));
+          console.log('❌ SQUAD: BookingDetails content:', JSON.stringify(bookingDetails, null, 2));
         }
       } catch (paymentError) {
         console.error('Failed to create Squad payment record:', paymentError);
@@ -290,6 +295,25 @@ async function verifyTransaction(reference, bookingDetails = null) {
       // Optionally, rethrow or handle the error as needed
     }
     // Send confirmation emails (always attempt, even if email is missing)
+    const formatPrice = (val) => {
+      if (!val || isNaN(val)) return '';
+      return `₦${Number(val).toLocaleString()}`;
+    };
+    // After paymentRecord is created, use its fields for emailContext if available
+    const getField = (field, fallback) => {
+      if (paymentRecord && paymentRecord[field] !== undefined && paymentRecord[field] !== null && paymentRecord[field] !== '') {
+        return paymentRecord[field];
+      }
+      return fallback;
+    };
+    // Calculate totalGuests as in payment.service.js
+    let totalGuests = 0;
+    if (roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount) {
+      const gc = roomDetails.selectedRooms[0].guestCount;
+      totalGuests = (gc.adults ?? 0) + (gc.children ?? 0) + (gc.toddlers ?? 0) + (gc.infants ?? 0);
+    } else if (guestCount) {
+      totalGuests = (guestCount.adults ?? 0) + (guestCount.children ?? 0) + (guestCount.toddler ?? 0) + (guestCount.infants ?? 0);
+    }
     const emailContext = {
       name: guestDetails.firstname || Body?.email || 'Guest',
       email: Body?.email || 'unknown@unknown.com',
@@ -297,23 +321,27 @@ async function verifyTransaction(reference, bookingDetails = null) {
       bookingType: bookingType || '',
       checkIn: roomDetails.visitDate || roomDetails.startDate || '',
       checkOut: roomDetails.endDate || '',
-      numberOfGuests: guestCount.adults || '',
-      numberOfNights: '',
-      extras: '',
-      subTotal: costBreakDown.RoomsPrice ? costBreakDown.RoomsPrice.toString() : '',
-      multiNightDiscount: costBreakDown.MultiNightDiscount ? costBreakDown.MultiNightDiscount.toString() : '',
-      clubMemberDiscount: '',
-      multiNightDiscountAvailable: '',
-      vat: costBreakDown.Vat ? costBreakDown.Vat.toString() : '',
-      totalCost: costBreakDown.TotalCost ? costBreakDown.TotalCost.toString() : '',
-      roomsPrice: costBreakDown.RoomsPrice ? costBreakDown.RoomsPrice.toString() : '',
-      extrasPrice: costBreakDown.ExtrasPrice ? costBreakDown.ExtrasPrice.toString() : '',
-      voucherApplied: costBreakDown.VoucherApplied || '',
-      discountApplied: costBreakDown.DiscountApplied || '',
-      totalGuests: guestCount.adults || '',
-      priceAfterVoucher: costBreakDown.PriceAfterVoucher || '',
-      priceAfterDiscount: costBreakDown.PriceAfterDiscount || ''
+      numberOfGuests: roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
+        ? `${roomDetails.selectedRooms[0].guestCount.adults ?? 0} Adults, ${roomDetails.selectedRooms[0].guestCount.children ?? 0} Children, ${roomDetails.selectedRooms[0].guestCount.toddlers ?? 0} Toddlers, ${roomDetails.selectedRooms[0].guestCount.infants ?? 0} Infants`
+        : `${guestCount.adults ?? 0} Adults, ${guestCount.children ?? 0} Children, ${guestCount.toddler ?? 0} Toddlers, ${guestCount.infants ?? 0} Infants`,
+      numberOfNights: (roomDetails.visitDate && roomDetails.endDate) ? Math.ceil((new Date(roomDetails.endDate) - new Date(roomDetails.visitDate)) / (1000 * 60 * 60 * 24)) : '',
+      extras: (roomDetails.finalData && roomDetails.finalData.length) ? roomDetails.finalData.map(e => e.title).join(', ') : 'No Extras',
+      subTotal: formatPrice(getField('subTotal', costBreakDown.RoomsPrice)),
+      multiNightDiscount: getField('multiNightDiscount', costBreakDown.multiNightDiscount) ? formatPrice(getField('multiNightDiscount', costBreakDown.multiNightDiscount)) : '',
+      clubMemberDiscount: getField('clubMemberDiscount', costBreakDown.clubDiscountApplied) ? formatPrice(getField('clubMemberDiscount', costBreakDown.clubDiscountApplied)) : '',
+      multiNightDiscountAvailable: getField('multiNightDiscountAvailable', costBreakDown.multiNightDiscountAvailable) ? formatPrice(getField('multiNightDiscountAvailable', costBreakDown.multiNightDiscountAvailable)) : '',
+      vat: getField('vat', costBreakDown.vat) ? formatPrice(getField('vat', costBreakDown.vat)) : '',
+      totalCost: getField('totalCost', costBreakDown.totalCost) ? formatPrice(getField('totalCost', costBreakDown.totalCost)) : formatPrice(transactionAmount),
+      roomsPrice: formatPrice(getField('roomsPrice', costBreakDown.RoomsPrice)),
+      extrasPrice: formatPrice(getField('extrasPrice', costBreakDown.ExtrasPrice)),
+      roomsDiscount: getField('roomsDiscount', costBreakDown.RoomsDiscount) ? formatPrice(getField('roomsDiscount', costBreakDown.RoomsDiscount)) : '',
+      discountApplied: getField('discountApplied', costBreakDown.discountApplied) === 'true' ? 'Yes' : 'No',
+      voucherApplied: getField('voucherApplied', costBreakDown.voucherApplied) === 'true' ? 'Yes' : 'No',
+      priceAfterVoucher: getField('priceAfterVoucher', costBreakDown.priceAfterVoucher) ? formatPrice(getField('priceAfterVoucher', costBreakDown.priceAfterVoucher)) : '',
+      priceAfterDiscount: getField('priceAfterDiscount', costBreakDown.priceAfterDiscount) ? formatPrice(getField('priceAfterDiscount', costBreakDown.priceAfterDiscount)) : '',
+      totalGuests: totalGuests,
     };
+    console.log('Email Context: ', emailContext);
     try {
       await sendEmail(
         Body.email || 'unknown@unknown.com',
@@ -415,6 +443,11 @@ const handleSquadWebhook = async (req, res) => {
     const roomDetails = meta.roomDetails || {};
     const guestCount = meta.guestCount || {};
     const costBreakDown = meta.costBreakDown || {};
+
+    console.log('meta', meta);
+    console.log('Guest Details', guestDetails)
+    console.log('Room Details', roomDetails)
+    console.log('Cost Details', costBreakDown)
     
     // Construct bookingDetails object that matches what verifyTransaction expects
     const bookingDetails = {
