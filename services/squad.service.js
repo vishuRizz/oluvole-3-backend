@@ -185,31 +185,59 @@ async function verifyTransaction(reference, bookingDetails = null) {
         bookingDetails.totalCost = transactionAmount;
       }
       try {
-        paymentRecord = await Payment.create({
-          name: bookingDetails.name || '',
-          amount: transactionAmount, // Always naira
-          status: paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
-          ref: reference,
-          method: 'Squad',
-          guestDetails: bookingDetails.guestDetails ? JSON.stringify(bookingDetails.guestDetails) : '',
-          roomDetails: bookingDetails.roomDetails ? JSON.stringify(bookingDetails.roomDetails) : '',
-          bookingInfo: bookingDetails.bookingInfo ? JSON.stringify(bookingDetails.bookingInfo) : '',
-          subTotal: bookingDetails.subTotal || '',
-          vat: bookingDetails.vat || '',
-          totalCost: getField('totalCost', costBreakDown.totalCost) ? formatPrice(getField('totalCost', costBreakDown.totalCost)) : formatPrice(transactionAmount),
-          discount: bookingDetails.discount || 0,
-          voucher: bookingDetails.voucher || 0,
-          multiNightDiscount: bookingDetails.multiNightDiscount || 0,
-          previousCost: bookingDetails.previousCost || 0,
-          previousPaymentStatus: bookingDetails.previousPaymentStatus || '',
-          roomsPrice: bookingDetails.roomsPrice || '',
-          extrasPrice: bookingDetails.extrasPrice || '',
-          roomsDiscount: bookingDetails.roomsDiscount || '',
-          discountApplied: bookingDetails.discountApplied || '',
-          voucherApplied: bookingDetails.voucherApplied || '',
-          priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
-          priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
-        });
+        let payment = await Payment.findOne({ ref: reference });
+        if (payment) {
+          payment.name = bookingDetails.name || '';
+          payment.amount = transactionAmount;
+          payment.status = paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
+          payment.ref = reference;
+          payment.method = 'Squad';
+          payment.guestDetails = JSON.stringify(guestDetails);
+          payment.roomDetails = JSON.stringify(roomDetails);
+          payment.bookingInfo = bookingDetails.bookingInfo ? JSON.stringify(bookingDetails.bookingInfo) : '';
+          payment.subTotal = bookingDetails.subTotal || '';
+          payment.vat = bookingDetails.vat || '';
+          payment.totalCost = bookingDetails.totalCost || transactionAmount;
+          payment.discount = bookingDetails.discount || 0;
+          payment.voucher = bookingDetails.voucher || 0;
+          payment.multiNightDiscount = bookingDetails.multiNightDiscount || 0;
+          payment.previousCost = bookingDetails.previousCost || 0;
+          payment.previousPaymentStatus = bookingDetails.previousPaymentStatus || '';
+          payment.roomsPrice = bookingDetails.roomsPrice || '';
+          payment.extrasPrice = bookingDetails.extrasPrice || '';
+          payment.roomsDiscount = bookingDetails.roomsDiscount || '';
+          payment.discountApplied = bookingDetails.discountApplied || '';
+          payment.voucherApplied = bookingDetails.voucherApplied || '';
+          payment.priceAfterVoucher = bookingDetails.priceAfterVoucher || '';
+          payment.priceAfterDiscount = bookingDetails.priceAfterDiscount || '';
+          await payment.save();
+        } else {
+          payment = await Payment.create({
+            name: bookingDetails.name || '',
+            amount: transactionAmount,
+            status: paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
+            ref: reference,
+            method: 'Squad',
+            guestDetails: JSON.stringify(guestDetails),
+            roomDetails: JSON.stringify(roomDetails),
+            bookingInfo: bookingDetails.bookingInfo ? JSON.stringify(bookingDetails.bookingInfo) : '',
+            subTotal: bookingDetails.subTotal || '',
+            vat: bookingDetails.vat || '',
+            totalCost: bookingDetails.totalCost || transactionAmount,
+            discount: bookingDetails.discount || 0,
+            voucher: bookingDetails.voucher || 0,
+            multiNightDiscount: bookingDetails.multiNightDiscount || 0,
+            previousCost: bookingDetails.previousCost || 0,
+            previousPaymentStatus: bookingDetails.previousPaymentStatus || '',
+            roomsPrice: bookingDetails.roomsPrice || '',
+            extrasPrice: bookingDetails.extrasPrice || '',
+            roomsDiscount: bookingDetails.roomsDiscount || '',
+            discountApplied: bookingDetails.discountApplied || '',
+            voucherApplied: bookingDetails.voucherApplied || '',
+            priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
+            priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
+          });
+        }
         if (!paymentRecord) {
           console.error('Failed to create Squad payment record: No record returned');
         }
