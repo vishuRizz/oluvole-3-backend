@@ -495,21 +495,16 @@ const confirm = asyncErrorHandler(async (req, res) => {
 
 const cancel = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
-  const payment = await paymentModel.findOne({ ref });
-  if (payment) {
-    const roomDetails = JSON.parse(payment.roomDetails);
-    if (roomDetails.selectedRooms) {
-      for (const room of roomDetails.selectedRooms) {
-        await SubRooms.findByIdAndUpdate(room.id, {
-          // $inc: { totalRoom: room.quantity },
-          totalRoom: 1,
-        });
-      }
+  // Find all payments with this ref
+  const payments = await paymentModel.find({ ref });
+  if (payments && payments.length > 0) {
+    for (const payment of payments) {
+      payment.status = "Cancelled";
+      await payment.save();
     }
-    payment.status = "Cancelled";
-    await payment.save();
-    res.status(statusCode.accepted).json(payment);
+    res.status(statusCode.accepted).json({ message: 'All payments with this ref have been cancelled', count: payments.length });
     const guestDetails = JSON.parse(payment.guestDetails);
+    const roomDetails = JSON.parse(payment.roomDetails);
     const bookingInfo = payment.bookingInfo
       ? JSON.parse(payment.bookingInfo)
       : null;
