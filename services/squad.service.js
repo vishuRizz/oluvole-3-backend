@@ -180,6 +180,16 @@ async function verifyTransaction(reference, bookingDetails = null) {
     let paymentRecord = null;
     // Always create payment record, regardless of status
     if (bookingDetails) {
+      // If VAT is not provided or invalid, calculate it from the total amount.
+      if ((!bookingDetails.vat || isNaN(parseFloat(bookingDetails.vat))) && transactionAmount > 0) {
+        const calculatedSubTotal = transactionAmount / 1.125;
+        bookingDetails.vat = transactionAmount - calculatedSubTotal;
+        // Only overwrite subTotal if it's not a valid number
+        if (!bookingDetails.subTotal || isNaN(parseFloat(bookingDetails.subTotal))) {
+          bookingDetails.subTotal = calculatedSubTotal;
+        }
+      }
+
       // If totalCost is missing or empty, set it to transactionAmount
       if (!bookingDetails.totalCost || bookingDetails.totalCost === '' || bookingDetails.totalCost === 0) {
         bookingDetails.totalCost = transactionAmount;
@@ -342,32 +352,45 @@ async function verifyTransaction(reference, bookingDetails = null) {
     } else if (guestCount) {
       totalGuests = (guestCount.adults ?? 0) + (guestCount.children ?? 0) + (guestCount.toddler ?? 0) + (guestCount.infants ?? 0);
     }
+
+    let extrasList = 'No Extras';
+    if (bookingType === 'overnight' && roomDetails.finalData && roomDetails.finalData.length > 0) {
+        extrasList = roomDetails.finalData.map(e => e.title).join(', ');
+    } else if (bookingType === 'daypass' && roomDetails.extras && roomDetails.extras.length > 0) {
+        extrasList = roomDetails.extras.map(e => e.title).join(', ');
+    }
+
+    function isValidNumber(val) {
+      return !isNaN(parseFloat(val)) && isFinite(val);
+    }
     const emailContext = {
       name: guestDetails.firstname || Body?.email || 'Guest',
       email: Body?.email || 'unknown@unknown.com',
       id: reference,
       bookingType: bookingType || '',
       checkIn: roomDetails.visitDate || roomDetails.startDate || '',
-      checkOut: roomDetails.endDate || '',
+      checkOut: roomDetails.endDate || 'N/A',
       numberOfGuests: roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
         ? `${roomDetails.selectedRooms[0].guestCount.adults ?? 0} Adults, ${roomDetails.selectedRooms[0].guestCount.children ?? 0} Children, ${roomDetails.selectedRooms[0].guestCount.toddlers ?? 0} Toddlers, ${roomDetails.selectedRooms[0].guestCount.infants ?? 0} Infants`
         : `${guestCount.adults ?? 0} Adults, ${guestCount.children ?? 0} Children, ${guestCount.toddler ?? 0} Toddlers, ${guestCount.infants ?? 0} Infants`,
-      numberOfNights: (roomDetails.visitDate && roomDetails.endDate) ? Math.ceil((new Date(roomDetails.endDate) - new Date(roomDetails.visitDate)) / (1000 * 60 * 60 * 24)) : '',
-      extras: (roomDetails.finalData && roomDetails.finalData.length) ? roomDetails.finalData.map(e => e.title).join(', ') : 'No Extras',
-      subTotal: bookingDetails.subTotal,
+      numberOfNights: (roomDetails.visitDate && roomDetails.endDate) ? Math.ceil((new Date(roomDetails.endDate) - new Date(roomDetails.visitDate)) / (1000 * 60 * 60 * 24)) : 'N/A',
+      extras: extrasList,
+      subTotal: bookingDetails.subTotal ? formatPrice(bookingDetails.subTotal) : '',
       multiNightDiscount: getField('multiNightDiscount', costBreakDown.multiNightDiscount) ? formatPrice(getField('multiNightDiscount', costBreakDown.multiNightDiscount)) : '0',
-      clubMemberDiscount: getField('clubMemberDiscount', costBreakDown.clubDiscountApplied) ? formatPrice(getField('clubMemberDiscount', costBreakDown.clubDiscountApplied)) : '',
+      clubMemberDiscount: getField('clubMemberDiscount', costBreakDown.clubDiscountApplied) ? formatPrice(getField('clubMemberDiscount', costBreakDown.clubDiscountApplied)) : '0',
       multiNightDiscountAvailable: getField('multiNightDiscountAvailable', costBreakDown.multiNightDiscountAvailable) ? formatPrice(getField('multiNightDiscountAvailable', costBreakDown.multiNightDiscountAvailable)) : '',
-      vat: getField('vat', costBreakDown.vat) ? formatPrice(getField('vat', costBreakDown.vat)) : '',
+      vat: bookingDetails.vat ? `${formatPrice(bookingDetails.vat)}` : '',
       totalCost: bookingDetails.totalCost || transactionAmount,
       totalGuests: totalGuests,
       roomsPrice: bookingDetails.roomsPrice || '',
-      extrasPrice: bookingDetails.extrasPrice || '',
-      roomsDiscount: bookingDetails.roomsDiscount || '',
-      discountApplied: bookingDetails.discountApplied || '',
-      voucherApplied: bookingDetails.voucherApplied || '',
-      priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
-      priceAfterDiscount: bookingDetails.priceAfterDiscount || ''
+      extrasPrice: bookingDetails.extrasPrice || '0',
+      roomsDiscount: bookingDetails.roomsDiscount || 'N/A',
+      voucherApplied: (costBreakDown.voucherApplied === 'true') ? 'Yes' : (costBreakDown.voucherApplied === 'false' ? 'No' : 'N/A'),
+      discountApplied: (costBreakDown.discountApplied === 'true') ? 'Yes' : (costBreakDown.discountApplied === 'false' ? 'No' : 'N/A'),
+      clubDiscountApplied: (costBreakDown.clubDiscountApplied === 'true') ? 'Yes' : (costBreakDown.clubDiscountApplied === 'false' ? 'No' : 'N/A'),
+      priceAfterVoucher: isValidNumber(costBreakDown.priceAfterVoucher) ? formatPrice(costBreakDown.priceAfterVoucher) : (isValidNumber(bookingDetails.totalCost) ? formatPrice(bookingDetails.totalCost) : 'N/A'),
+      priceAfterDiscount: isValidNumber(costBreakDown.priceAfterDiscount) ? formatPrice(costBreakDown.priceAfterDiscount) : (isValidNumber(bookingDetails.totalCost) ? formatPrice(bookingDetails.totalCost) : 'N/A'),
+      priceAfterClubDiscount: isValidNumber(costBreakDown.priceAfterClubDiscount) ? formatPrice(costBreakDown.priceAfterClubDiscount) : (isValidNumber(bookingDetails.totalCost) ? formatPrice(bookingDetails.totalCost) : 'N/A'),
     };
     console.log('Email Context: ', emailContext);
     try {
@@ -467,9 +490,27 @@ const handleSquadWebhook = async (req, res) => {
     
     // 3. Extract meta fields and construct bookingDetails like verifyTransaction expects
     const meta = Body?.meta || {};
-    const guestDetails = meta.guestDetails || {};
-    const roomDetails = meta.roomDetails || {};
-    const guestCount = meta.guestCount || {};
+    let guestDetails, roomDetails, guestCount, bookingInfo;
+
+    // Distinguish between daypass and other booking types from webhook
+    if (meta.availablity && meta.guestInfo) {
+      // Daypass booking
+      guestDetails = meta.guestInfo || {};
+      roomDetails = meta.availablity || {};
+      bookingInfo = meta.bookingInfo || {};
+      guestCount = {
+        adults: (bookingInfo.adultsAlcoholic || 0) + (bookingInfo.adultsNonAlcoholic || 0),
+        children: bookingInfo.childTotal || 0,
+        toddler: 0,
+        infants: 0
+      };
+    } else {
+      // Overnight or other booking types
+      guestDetails = meta.guestDetails || {};
+      roomDetails = meta.roomDetails || {};
+      guestCount = meta.guestCount || {};
+      bookingInfo = meta.bookingInfo || {};
+    }
     const costBreakDown = meta.costBreakDown || {};
 
     console.log('meta', meta);
@@ -483,7 +524,8 @@ const handleSquadWebhook = async (req, res) => {
       email: guestDetails.email || Body?.email || 'unknown@unknown.com',
       guestDetails: guestDetails,
       roomDetails: roomDetails,
-      bookingInfo: '',
+      guestCount: guestCount,
+      bookingInfo: bookingInfo,
       subTotal: costBreakDown.RoomsPrice || '',
       vat: costBreakDown.Vat || '',
       totalCost: costBreakDown.TotalCost || '',

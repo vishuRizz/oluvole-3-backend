@@ -503,91 +503,83 @@ const cancel = asyncErrorHandler(async (req, res) => {
       await payment.save();
     }
     res.status(statusCode.accepted).json({ message: 'All payments with this ref have been cancelled', count: payments.length });
-    const guestDetails = JSON.parse(payment.guestDetails);
-    const roomDetails = JSON.parse(payment.roomDetails);
-    const bookingInfo = payment.bookingInfo
-      ? JSON.parse(payment.bookingInfo)
+    // Use the last payment for email context
+    const lastPayment = payments[payments.length - 1];
+    const guestDetails = JSON.parse(lastPayment.guestDetails);
+    const roomDetails = JSON.parse(lastPayment.roomDetails);
+    const bookingInfo = lastPayment.bookingInfo
+      ? JSON.parse(lastPayment.bookingInfo)
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
 
+    // Add VAT/subtotal fallback logic as in squad.service.js
+    if ((!lastPayment.vat || isNaN(parseFloat(lastPayment.vat))) && lastPayment.totalCost && !isNaN(parseFloat(lastPayment.totalCost))) {
+      const calculatedSubTotal = lastPayment.totalCost / 1.125;
+      lastPayment.vat = lastPayment.totalCost - calculatedSubTotal;
+      if (!lastPayment.subTotal || isNaN(parseFloat(lastPayment.subTotal))) {
+        lastPayment.subTotal = calculatedSubTotal;
+      }
+    }
+    // Accept both numbers and numeric strings
+    function isValidNumber(val) {
+      return !isNaN(parseFloat(val)) && isFinite(val);
+    }
     const emailContext = {
-      name: payment.name,
-      email: guestDetails.email,
-      id: payment.ref,
+      name: lastPayment.name || 'N/A',
+      email: guestDetails.email || 'N/A',
+      id: lastPayment.ref || 'N/A',
       bookingType:
-        roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
-        "Day Pass",
+        (roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) || 'Day Pass'),
       checkIn: roomDetails?.visitDate
         ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
+        : roomDetails?.startDate
+        ? `${roomDetails?.startDate}, (12noon)`
+        : 'N/A',
       checkOut: roomDetails?.endDate
         ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
-      numberOfGuests: roomDetails?.visitDate
-        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-        } Infants`
+        : roomDetails?.startDate
+        ? `${roomDetails?.startDate}, (6pm)`
+        : 'N/A',
+      numberOfGuests: roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
+        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0} Children, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0} Toddlers, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0} Infants`
         : bookingInfo
-          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
-          } Children`,
+        ? `${bookingInfo?.adultsAlcoholic ?? 0} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic ?? 0} Adults Non Alcoholic, ${bookingInfo?.Nanny ?? 0} Nanny, ${bookingInfo?.childTotal ?? 0} Child`
+        : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0} Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
-        : "Day Pass",
+        : 'Day Pass',
       extras:
-        roomDetails?.visitDate && roomDetails?.finalData
-          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
-          : roomDetails?.startDate && roomDetails?.extras
-            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-            : "No Extras",
-      subTotal: formatPrice(payment.subTotal),
-      multiNightDiscount: payment.discount.toLocaleString(),
-      clubMemberDiscount: payment.voucher,
-      multiNightDiscountAvailable: payment.multiNightDiscount
-        ? payment.multiNightDiscount
-        : 0,
-      vat: formatPrice(payment.vat),
-      totalCost: formatPrice(payment.totalCost),
-      roomsPrice: payment.roomsPrice
-        ? payment.roomsPrice == "Daypass"
-          ? payment.roomsPrice
-          : formatPrice(payment.roomsPrice)
-        : "",
-      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
-      roomsDiscount: payment.roomsDiscount
-        ? payment.roomsDiscount == "Daypass"
-          ? payment.roomsDiscount
-          : formatPrice(payment.roomsDiscount)
-        : "",
-      discountApplied: payment.discountApplied
-        ? payment.discountApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      voucherApplied: payment.voucherApplied
-        ? payment.voucherApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      priceAfterVoucher: payment.priceAfterVoucher
-        ? formatPrice(payment.priceAfterVoucher)
-        : "",
-      priceAfterDiscount: payment.priceAfterDiscount
-        ? formatPrice(payment.priceAfterDiscount)
-        : "",
-      totalGuests: totalGuests,
+        roomDetails?.visitDate && roomDetails?.finalData && roomDetails?.finalData.length > 0
+          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`).join(', ')
+          : roomDetails?.startDate && roomDetails?.extras && roomDetails?.extras.length > 0
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`).join(', ')
+          : 'No Extras',
+      subTotal: isValidNumber(lastPayment.subTotal) ? formatPrice(lastPayment.subTotal) : 'N/A',
+      multiNightDiscount: isValidNumber(lastPayment.discount) ? formatPrice(lastPayment.discount) : 'N/A',
+      clubMemberDiscount: isValidNumber(lastPayment.voucher) ? formatPrice(lastPayment.voucher) : 'N/A',
+      multiNightDiscountAvailable: isValidNumber(lastPayment.multiNightDiscount) ? formatPrice(lastPayment.multiNightDiscount) : 'N/A',
+      vat: isValidNumber(lastPayment.vat) ? formatPrice(lastPayment.vat) : 'N/A',
+      totalCost: isValidNumber(lastPayment.totalCost) ? formatPrice(lastPayment.totalCost) : 'N/A',
+      roomsPrice: lastPayment.roomsPrice ? (lastPayment.roomsPrice == 'Daypass' ? lastPayment.roomsPrice : formatPrice(lastPayment.roomsPrice)) : 'N/A',
+      extrasPrice: isValidNumber(lastPayment.extrasPrice) ? formatPrice(lastPayment.extrasPrice) : 'N/A',
+      roomsDiscount: isValidNumber(lastPayment.roomsDiscount) ? formatPrice(lastPayment.roomsDiscount) : 'N/A',
+      discountApplied: lastPayment.discountApplied ? (lastPayment.discountApplied == 'true' ? 'Yes' : 'No') : 'N/A',
+      voucherApplied: lastPayment.voucherApplied ? (lastPayment.voucherApplied == 'true' ? 'Yes' : 'No') : 'N/A',
+      priceAfterVoucher: isValidNumber(lastPayment.priceAfterVoucher) ? formatPrice(lastPayment.priceAfterVoucher) : (isValidNumber(lastPayment.totalCost) ? formatPrice(lastPayment.totalCost) : 'N/A'),
+      priceAfterDiscount: isValidNumber(lastPayment.priceAfterDiscount) ? formatPrice(lastPayment.priceAfterDiscount) : (isValidNumber(lastPayment.totalCost) ? formatPrice(lastPayment.totalCost) : 'N/A'),
+      totalGuests: isValidNumber(totalGuests) ? totalGuests : 'N/A',
     };
-    sendEmail(
+    console.log('Attempting to send cancellation email to:', guestDetails.email);
+    console.log('Email context:', emailContext);
+    await sendEmail(
       guestDetails.email,
       "Your Booking Has Been Cancelled",
       "cancellation",
