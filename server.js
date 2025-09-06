@@ -26,14 +26,12 @@ app.use(express.json());
 app.use(cors({ origin: "*" }));
 app.use(morgan("combined", { stream: logger.stream }));
 
-app.use(errorMiddleware); // CUSTOM ERROR MIDDLEWARE
+// Static file serving should be before API routes
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.get("/health", function (req, res) {
   return res.send("Server Operation Success");
 });
-
-app.use(errorMiddleware);
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // CUSTOM ERROR MIDDLEWARE
 
 app.use("/api/v1", allRoutes); // ALL API END POINTS
 
@@ -52,6 +50,9 @@ app.get("/test-error", (req, res) => {
 app.use((req, res, next) => {
   next(new ErrorResponse("Invalid Api", statusCode?.notFound));
 });
+
+// Error middleware should be last
+app.use(errorMiddleware);
 
 app.listen(port, () => {
   console.log(`server is running on PORT ${port}`);
