@@ -12,9 +12,24 @@ const BookingLog = require('../models/bookingLog.schema.js');
 
 function formatDate(dateString) {
   const date = new Date(dateString);
-  const options = { year: "numeric", month: "long", day: "numeric" };
-  const formattedDate = date.toLocaleDateString("en-US", options);
-  return formattedDate;
+  const day = date.getDate();
+  const v = day % 100;
+  const suffix = (v - 20) % 10 === 1
+    ? "st"
+    : (v - 20) % 10 === 2
+    ? "nd"
+    : (v - 20) % 10 === 3
+    ? "rd"
+    : v === 1
+    ? "st"
+    : v === 2
+    ? "nd"
+    : v === 3
+    ? "rd"
+    : "th";
+  const month = date.toLocaleString("en-US", { month: "long" });
+  const year = date.getFullYear();
+  return `${day}${suffix}, ${month} ${year}`;
 }
 
 const formatPrice = (price) => {
@@ -133,11 +148,11 @@ const create = asyncErrorHandler(async (req, res) => {
           roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
           "Day Pass",
         checkIn: roomDetails?.visitDate
-          ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-          : `${roomDetails?.startDate}, (12noon)`,
+          ? `${formatDate(roomDetails?.visitDate)}`
+          : `${formatDate(roomDetails?.startDate)}`,
         checkOut: roomDetails?.endDate
-          ? `${formatDate(roomDetails?.endDate)}, (11am)`
-          : `${roomDetails?.startDate}, (6pm)`,
+          ? `${formatDate(roomDetails?.endDate)}`
+          : `${formatDate(roomDetails?.startDate)}`,
         numberOfGuests: roomDetails?.visitDate
           ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
           } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
@@ -354,11 +369,11 @@ const confirm = asyncErrorHandler(async (req, res) => {
         roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
         "Day Pass",
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
+        ? `${formatDate(roomDetails?.visitDate)}`
+        : `${formatDate(roomDetails?.startDate)}`,
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
+        ? `${formatDate(roomDetails?.endDate)}`
+        : `${formatDate(roomDetails?.startDate)}`,
       numberOfGuests: roomDetails?.visitDate
         ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
         } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
@@ -470,11 +485,11 @@ const cancel = asyncErrorHandler(async (req, res) => {
         roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
         "Day Pass",
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
+        ? `${formatDate(roomDetails?.visitDate)}`
+        : `${formatDate(roomDetails?.startDate)}`,
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
+        ? `${formatDate(roomDetails?.endDate)}`
+        : `${formatDate(roomDetails?.startDate)}`,
       numberOfGuests: roomDetails?.visitDate
         ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
         } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
@@ -581,11 +596,11 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     bookingType:
       roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) || "Day Pass",
     checkIn: roomDetails?.visitDate
-      ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-      : `${roomDetails?.startDate}, (12noon)`,
+      ? `${formatDate(roomDetails?.visitDate)}`
+      : `${formatDate(roomDetails?.startDate)}`,
     checkOut: roomDetails?.endDate
-      ? `${formatDate(roomDetails?.endDate)}, (11am)`
-      : `${roomDetails?.startDate}, (6pm)`,
+      ? `${formatDate(roomDetails?.endDate)}`
+      : `${formatDate(roomDetails?.startDate)}`,
     numberOfGuests: roomDetails?.visitDate
       ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
       } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
