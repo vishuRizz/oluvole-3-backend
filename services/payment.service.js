@@ -145,8 +145,9 @@ const create = asyncErrorHandler(async (req, res) => {
         email: guestDetails.email,
         id: req.body.ref,
         bookingType:
-          roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
-          "Day Pass",
+          (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
+            ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
+            : "Day Pass",
         checkIn: roomDetails?.visitDate
           ? `${formatDate(roomDetails?.visitDate)}`
           : `${formatDate(roomDetails?.startDate)}`,
@@ -366,8 +367,9 @@ const confirm = asyncErrorHandler(async (req, res) => {
       email: guestDetails.email,
       id: payment.ref,
       bookingType:
-        roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
-        "Day Pass",
+        (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
+          ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
+          : "Day Pass",
       checkIn: roomDetails?.visitDate
         ? `${formatDate(roomDetails?.visitDate)}`
         : `${formatDate(roomDetails?.startDate)}`,
@@ -594,7 +596,9 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     email: guestDetails.email,
     id: payment.ref,
     bookingType:
-      roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) || "Day Pass",
+      (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
+        ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
+        : "Day Pass",
     checkIn: roomDetails?.visitDate
       ? `${formatDate(roomDetails?.visitDate)}`
       : `${formatDate(roomDetails?.startDate)}`,
