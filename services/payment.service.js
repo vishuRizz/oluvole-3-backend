@@ -29,7 +29,7 @@ function formatDate(dateString) {
     : "th";
   const month = date.toLocaleString("en-US", { month: "long" });
   const year = date.getFullYear();
-  return `${day}${suffix}, ${month} ${year}`;
+  return `${day}${suffix},${month.toLowerCase()} ${year}`;
 }
 
 const formatPrice = (price) => {
