@@ -337,6 +337,14 @@ async function verifyTransaction(reference, bookingDetails = null) {
       if (!val || isNaN(val)) return '';
       return `₦${Number(val).toLocaleString()}`;
     };
+    
+    function formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      const options = { year: "numeric", month: "long", day: "numeric" };
+      return date.toLocaleDateString("en-US", options);
+    }
+    
     // After paymentRecord is created, use its fields for emailContext if available
     const getField = (field, fallback) => {
       if (paymentRecord && paymentRecord[field] !== undefined && paymentRecord[field] !== null && paymentRecord[field] !== '') {
@@ -363,13 +371,24 @@ async function verifyTransaction(reference, bookingDetails = null) {
     function isValidNumber(val) {
       return !isNaN(parseFloat(val)) && isFinite(val);
     }
+    // Format room names for bookingType
+    const roomNames = roomDetails?.selectedRooms && roomDetails.selectedRooms.length > 0
+      ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
+      : bookingType || "Day Pass";
+    
     const emailContext = {
       name: guestDetails.firstname || Body?.email || 'Guest',
       email: Body?.email || 'unknown@unknown.com',
       id: reference,
-      bookingType: bookingType || '',
-      checkIn: roomDetails.visitDate || roomDetails.startDate || '',
-      checkOut: roomDetails.endDate || 'N/A',
+      bookingType: roomNames,
+      checkIn: roomDetails.visitDate 
+        ? formatDate(roomDetails.visitDate)
+        : roomDetails.startDate 
+        ? formatDate(roomDetails.startDate)
+        : '',
+      checkOut: roomDetails.endDate 
+        ? formatDate(roomDetails.endDate)
+        : 'N/A',
       numberOfGuests: roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
         ? `${roomDetails.selectedRooms[0].guestCount.adults ?? 0} Adults, ${roomDetails.selectedRooms[0].guestCount.children ?? 0} Children, ${roomDetails.selectedRooms[0].guestCount.toddlers ?? 0} Toddlers, ${roomDetails.selectedRooms[0].guestCount.infants ?? 0} Infants`
         : `${guestCount.adults ?? 0} Adults, ${guestCount.children ?? 0} Children, ${guestCount.toddler ?? 0} Toddlers, ${guestCount.infants ?? 0} Infants`,

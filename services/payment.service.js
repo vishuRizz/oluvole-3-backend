@@ -153,14 +153,14 @@ const create = asyncErrorHandler(async (req, res) => {
       email: guestDetails.email,
       id: req.body.ref,
       bookingType:
-        roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
+        roomDetails?.selectedRooms?.map((room) => room.title).join(", ") ||
         "Day Pass",
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
+        ? formatDate(roomDetails?.visitDate)
+        : roomDetails?.startDate ? formatDate(roomDetails?.startDate) : roomDetails?.startDate,
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
+        ? formatDate(roomDetails?.endDate)
+        : roomDetails?.startDate ? formatDate(roomDetails?.startDate) : roomDetails?.startDate,
       numberOfGuests: roomDetails?.visitDate
         ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
         } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
@@ -412,14 +412,14 @@ const confirm = asyncErrorHandler(async (req, res) => {
       email: guestDetails.email,
       id: payment.ref,
       bookingType:
-        roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
+        roomDetails?.selectedRooms?.map((room) => room.title).join(", ") ||
         "Day Pass",
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
-        : `${roomDetails?.startDate}, (12noon)`,
+        ? formatDate(roomDetails?.visitDate)
+        : roomDetails?.startDate ? formatDate(roomDetails?.startDate) : roomDetails?.startDate,
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}, (11am)`
-        : `${roomDetails?.startDate}, (6pm)`,
+        ? formatDate(roomDetails?.endDate)
+        : roomDetails?.startDate ? formatDate(roomDetails?.startDate) : roomDetails?.startDate,
       numberOfGuests: roomDetails?.visitDate
         ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
         } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
