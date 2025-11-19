@@ -4,6 +4,7 @@ const { sendEmail } = require('../config/mail.config');
 const Payment = require('../models/payment.schema');
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const { daypassBooking } = require('../models/overnight.booking.schema');
+const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
 // Replace: const { nanoid } = require('nanoid');
 // With dynamic import helper for nanoid
 const nanoid = async () => (await import('nanoid')).nanoid;
@@ -145,6 +146,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
     roomDetails = typeof bookingDetails.roomDetails === 'string'
       ? JSON.parse(bookingDetails.roomDetails)
       : bookingDetails.roomDetails || {};
+    roomDetails = normalizeRoomDetails(roomDetails);
     guestCount = bookingDetails.guestCount || {};
     costBreakDown = bookingDetails.costBreakDown || {};
     Body = bookingDetails; // fallback for email, etc.
