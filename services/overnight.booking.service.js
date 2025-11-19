@@ -1,6 +1,9 @@
 const { overnightBooking } = require("../models/overnight.booking.schema");
 const logger = require("../utils/logger");
 const {
+  normalizeRoomDetails,
+} = require("../utils/nightlyAssignments");
+const {
   ErrorResponse,
   asyncErrorHandler,
 } = require("../middlewares/error/error");
@@ -11,6 +14,7 @@ const createBooking = asyncErrorHandler(async (req, res) => {
     let { guestCount, guestDetails, roomDetails, ref } = req.body;
     guestDetails = JSON.parse(guestDetails);
     roomDetails = JSON.parse(roomDetails);
+    roomDetails = normalizeRoomDetails(roomDetails);
     const file = req.file;
     const fileData = file ? file.filename : "no file";
     if (!guestCount || !guestDetails || !roomDetails || !file) {
@@ -85,6 +89,7 @@ const updateBooking = asyncErrorHandler(async (req, res) => {
   let { guestCount, guestDetails, roomDetails } = req.body;
   guestDetails = JSON.parse(guestDetails);
   roomDetails = JSON.parse(roomDetails);
+  roomDetails = normalizeRoomDetails(roomDetails);
   const file = req.file;
   const fileUrl = file
     ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`

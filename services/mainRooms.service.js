@@ -2,6 +2,9 @@ const { asyncErrorHandler } = require("../middlewares/error/error");
 const { overnightBooking } = require("../models/overnight.booking.schema");
 const { RoomTypes, SubRooms } = require("../models/rooms.schema");
 const { paymentModel } = require("../models");
+const {
+  getStoredNightlyAssignments,
+} = require("../utils/nightlyAssignments");
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -70,25 +73,34 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       continue; // Skip to the next booking
     }
 
-    const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
-    const endDate2 = new Date(bookingItem.bookingDetails.endDate);
+    const nightlyAssignments = getStoredNightlyAssignments(
+      bookingItem.bookingDetails
+    );
 
-    // Check if the booking dates overlap with the requested dates
-    if (visitDate2 < endingDate && endDate2 > startingDate) {
-      // Fetch the corresponding payment for the booking
-      const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
-
-      // Only consider confirmed or pending payments
-      if (
-        payment &&
-        (payment.status === "Success" || payment.status === "Pending")
-      ) {
-        bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
-          const roomId = selectedRoom.id; // Get the room ID
-          bookedRoomIds.add(roomId); // Add the room ID to the set of booked rooms
-        });
-      }
+    if (!nightlyAssignments.length) {
+      continue;
     }
+
+    const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
+
+    if (
+      !payment ||
+      (payment.status !== "Success" && payment.status !== "Pending")
+    ) {
+      continue;
+    }
+
+    nightlyAssignments.forEach((assignment) => {
+      if (!assignment?.roomId || !assignment?.startDate || !assignment?.endDate)
+        return;
+      const assignmentStart = new Date(assignment.startDate);
+      const assignmentEnd = new Date(assignment.endDate);
+
+      // Check if nightly assignment overlaps with requested dates
+      if (assignmentStart < endingDate && assignmentEnd > startingDate) {
+        bookedRoomIds.add(`${assignment.roomId}`);
+      }
+    });
   }
 
   // Filter out booked rooms from the available rooms
@@ -100,13 +112,56 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
   const { roomId } = req.params;
-  const bookings = await overnightBooking.find({
-    "bookingDetails.selectedRooms.id": roomId,
-  });
-  if (!bookings) {
-    return res.status(404).json({ error: "Bookings not found" });
+  const bookings = await overnightBooking
+    .find({
+      "bookingDetails.selectedRooms.id": roomId,
+    })
+    .lean();
+
+  if (!bookings || bookings.length === 0) {
+    return res.status(200).json([]);
   }
-  res.status(200).json(bookings);
+
+  const expandedBookings = [];
+
+  bookings.forEach((booking) => {
+    const nightlyAssignments = getStoredNightlyAssignments(
+      booking.bookingDetails
+    ).filter((assignment) => `${assignment.roomId}` === `${roomId}`);
+
+    if (!nightlyAssignments.length) {
+      return;
+    }
+
+    nightlyAssignments.forEach((assignment, index) => {
+      const cloned = { ...booking };
+      cloned.parentBookingId = booking._id;
+      cloned._id = `${booking._id}_${assignment.roomId}_${assignment.startDate}_${index}`;
+      cloned.bookingDetails = {
+        ...cloned.bookingDetails,
+        visitDate: assignment.startDate,
+        endDate: assignment.endDate,
+        selectedRooms: [
+          {
+            ...(assignment.roomData || {}),
+            id: assignment.roomId,
+            title: assignment.roomTitle || assignment.roomData?.title,
+            nightlyGuestAllocation: assignment.guestAllocation || null,
+          },
+        ],
+      };
+      cloned.nightlyAssignment = assignment;
+      expandedBookings.push(cloned);
+    });
+  });
+
+  expandedBookings.sort(
+    (a, b) =>
+      new Date(a.bookingDetails.visitDate) -
+      new Date(b.bookingDetails.visitDate)
+  );
+
+  res.status(200).json(expandedBookings);
 });
 
 module.exports = {
