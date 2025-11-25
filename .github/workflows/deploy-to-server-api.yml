@@ -42,6 +42,6 @@ jobs:
           script: |
             cd ~/JaraNewBuildBackend
             git fetch origin
-            git pull origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
             npm install --production
-            pm2 restart server
+            pm2 restart 0
