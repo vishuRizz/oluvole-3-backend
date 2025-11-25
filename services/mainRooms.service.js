@@ -61,6 +61,14 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
+  // FIX N+1 PROBLEM: Fetch all payments in one query
+  const bookingRefs = bookings.map(b => b.shortId).filter(Boolean);
+  const payments = await paymentModel.find({
+    ref: { $in: bookingRefs },
+    status: { $in: ['Success', 'Pending'] }
+  });
+  const paymentMap = new Map(payments.map(p => [p.ref, p]));
+
   const roomOccupancyMap = new Map();
 
   for (const bookingItem of bookings) {
@@ -72,14 +80,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       continue; // Skip to the next booking
     }
 
-    // Fetch the corresponding payment for the booking
-    const payment = await paymentModel.findOne({ ref: bookingItem.shortId });
+    // Use pre-fetched payment from map
+    const payment = paymentMap.get(bookingItem.shortId);
 
-    // Only consider confirmed or pending payments
-    if (
-      !payment ||
-      (payment.status !== 'Success' && payment.status !== 'Pending')
-    ) {
+    // Skip if no payment or not confirmed/pending (already filtered in query)
+    if (!payment) {
       continue;
     }
 
