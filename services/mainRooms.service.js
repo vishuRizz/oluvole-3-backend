@@ -1,7 +1,7 @@
-const { asyncErrorHandler } = require("../middlewares/error/error");
-const { overnightBooking } = require("../models/overnight.booking.schema");
-const { RoomTypes, SubRooms } = require("../models/rooms.schema");
-const { paymentModel } = require("../models");
+const { asyncErrorHandler } = require('../middlewares/error/error');
+const { overnightBooking } = require('../models/overnight.booking.schema');
+const { RoomTypes, SubRooms } = require('../models/rooms.schema');
+const { paymentModel } = require('../models');
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -35,36 +35,35 @@ const updateSubRoom = asyncErrorHandler(async (req, res) => {
 
 const deleteSubRoom = asyncErrorHandler(async (req, res) => {
   let del = await SubRooms.findByIdAndDelete(req.params.id);
-  res.status(200).json({ msg: "SUB ROOM DELETED" });
+  res.status(200).json({ msg: 'SUB ROOM DELETED' });
 });
 
 const getAllSubRoom = asyncErrorHandler(async (req, res) => {
-  let allRooms = await SubRooms.find({}).populate("roomId");
+  let allRooms = await SubRooms.find({}).populate('roomId');
   res.status(200).json(allRooms);
 });
 
 const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
-  console.log("request body", req.body);
+  console.log('request body', req.body);
   let { visitDate, endDate } = req.body;
   if (!visitDate || !endDate) {
     return res
       .status(400)
-      .json({ error: "visitDate and endDate are required" });
+      .json({ error: 'visitDate and endDate are required' });
   }
 
   // Fetch all bookings
   const bookings = await overnightBooking.find({});
-  let allRooms = await SubRooms.find({}).populate("roomId");
+  let allRooms = await SubRooms.find({}).populate('roomId');
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
-  // Create a set to track booked room IDs
-  const bookedRoomIds = new Set();
+  const roomOccupancyMap = new Map();
 
   for (const bookingItem of bookings) {
     if (!bookingItem.bookingDetails) {
       console.log(
-        "booking details not found for booking with id ",
+        'booking details not found for booking with id ',
         bookingItem._id
       );
       continue; // Skip to the next booking
@@ -81,30 +80,84 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       // Only consider confirmed or pending payments
       if (
         payment &&
-        (payment.status === "Success" || payment.status === "Pending")
+        (payment.status === 'Success' || payment.status === 'Pending')
       ) {
-        bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
-          const roomId = selectedRoom.id; // Get the room ID
-          bookedRoomIds.add(roomId); // Add the room ID to the set of booked rooms
-        });
+        if (
+          bookingItem.bookingDetails.roomAssignments &&
+          bookingItem.bookingDetails.roomAssignments.length > 0
+        ) {
+          bookingItem.bookingDetails.roomAssignments.forEach((assignment) => {
+            const roomId = assignment.roomId.toString();
+            const assignmentDate = new Date(assignment.date);
+
+            if (assignmentDate >= startingDate && assignmentDate < endingDate) {
+              if (!roomOccupancyMap.has(roomId)) {
+                roomOccupancyMap.set(roomId, new Set());
+              }
+
+              const dateString = assignmentDate.toISOString().split('T')[0];
+              roomOccupancyMap.get(roomId).add(dateString);
+            }
+          });
+        }
+        // FALLBACK
+        else if (bookingItem.bookingDetails.selectedRooms) {
+          bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
+            const roomId = selectedRoom.id;
+            if (!roomOccupancyMap.has(roomId)) {
+              roomOccupancyMap.set(roomId, new Set());
+            }
+
+            let currentDate = new Date(Math.max(visitDate2, startingDate));
+            const maxDate = new Date(Math.min(endDate2, endingDate));
+
+            while (currentDate < maxDate) {
+              const dateString = currentDate.toISOString().split('T')[0];
+              roomOccupancyMap.get(roomId).add(dateString);
+              currentDate.setDate(currentDate.getDate() + 1);
+            }
+          });
+        }
       }
     }
   }
 
-  // Filter out booked rooms from the available rooms
-  const availableRooms = allRooms.filter(
-    (room) => !bookedRoomIds.has(room._id.toString())
+  const numberOfNights = Math.ceil(
+    (endingDate - startingDate) / (1000 * 60 * 60 * 24)
   );
+
+  const availableRooms = allRooms.filter((room) => {
+    const roomId = room._id.toString();
+
+    if (!roomOccupancyMap.has(roomId)) {
+      return true;
+    }
+
+    const occupiedDates = roomOccupancyMap.get(roomId);
+
+    let currentDate = new Date(startingDate);
+    while (currentDate < endingDate) {
+      const dateString = currentDate.toISOString().split('T')[0];
+
+      if (occupiedDates.has(dateString)) {
+        return false;
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return true;
+  });
 
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
   const { roomId } = req.params;
   const bookings = await overnightBooking.find({
-    "bookingDetails.selectedRooms.id": roomId,
+    'bookingDetails.selectedRooms.id': roomId,
   });
   if (!bookings) {
-    return res.status(404).json({ error: "Bookings not found" });
+    return res.status(404).json({ error: 'Bookings not found' });
   }
   res.status(200).json(bookings);
 });
