@@ -1,6 +1,8 @@
 const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
 const { daypassModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const { v4: uuidv4 } = require('uuid');
+const DaypassBooking = require('../models/daypass.schema');
 
 
 const create = asyncErrorHandler(async(req,res)=>{
@@ -27,5 +29,23 @@ const getSingle = asyncErrorHandler(async(req,res)=>{
     else {throw new ErrorResponse("No Daypass Booking Found",404)}
 })
 
+const initiateDaypassBooking = async (req, res) => {
+  try {
+    const bookingDetails = req.body;
+    // Generate a unique reference
+    const reference = `JARA-SQUAD-${uuidv4()}`;
+    const newBooking = new DaypassBooking({
+      ...bookingDetails,
+      reference,
+      status: 'pending',
+      createdAt: new Date(),
+    });
+    await newBooking.save();
+    return res.status(201).json({ reference });
+  } catch (err) {
+    console.error('Error initiating daypass booking:', err);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
 
-module.exports = { create, getAll, getSingle}
+module.exports = { create, getAll, getSingle, initiateDaypassBooking };

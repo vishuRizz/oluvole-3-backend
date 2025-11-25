@@ -1,6 +1,9 @@
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const logger = require('../utils/logger');
 const {
+  normalizeRoomDetails,
+} = require("../utils/nightlyAssignments");
+const {
   ErrorResponse,
   asyncErrorHandler,
 } = require('../middlewares/error/error');
@@ -8,9 +11,10 @@ const {
 // const { nanoid } = require("nanoid");
 const createBooking = asyncErrorHandler(async (req, res) => {
   try {
-    let { guestCount, guestDetails, roomDetails } = req.body;
+    let { guestCount, guestDetails, roomDetails, ref } = req.body;
     guestDetails = JSON.parse(guestDetails);
     roomDetails = JSON.parse(roomDetails);
+    roomDetails = normalizeRoomDetails(roomDetails);
     const file = req.file;
     const fileData = file ? file.filename : 'no file';
     if (!guestCount || !guestDetails || !roomDetails || !file) {
@@ -26,6 +30,7 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       photo: fileUrl,
     };
 
+    // Multi-night booking transformation
     if (roomDetails.multiNightSelections) {
       const roomAssignments = [];
 
@@ -55,13 +60,18 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       });
     }
 
-    const { nanoid } = await import('nanoid');
+    // Generate or use provided shortId
+    let shortIdToUse = ref;
+    if (!shortIdToUse) {
+      const { nanoid } = await import("nanoid");
+      shortIdToUse = nanoid(8).toUpperCase();
+    }
 
     let create = await overnightBooking.create({
       totalGuest: guestCount,
       bookingDetails: roomDetails,
       guestDetails: updatedGuestDetails,
-      shortId: nanoid(8).toUpperCase(), // Generate a short unique ID
+      shortId: shortIdToUse,
     });
 
     res.status(200).json(create);
@@ -83,10 +93,8 @@ const getAllBooking = asyncErrorHandler(async (req, res) => {
 
 const getBookingByRef = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
-
   // Attempt to find the booking by either _id or shortId
   const booking = await overnightBooking.findOne({ shortId: ref });
-
   if (!booking) {
     throw new ErrorResponse('Booking not found', 404);
   }
@@ -112,6 +120,7 @@ const updateBooking = asyncErrorHandler(async (req, res) => {
   let { guestCount, guestDetails, roomDetails } = req.body;
   guestDetails = JSON.parse(guestDetails);
   roomDetails = JSON.parse(roomDetails);
+  roomDetails = normalizeRoomDetails(roomDetails);
   const file = req.file;
   const fileUrl = file
     ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`

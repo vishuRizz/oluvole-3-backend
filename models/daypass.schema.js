@@ -6,7 +6,9 @@ const daypassSchema = mongoose.Schema({
     mobile:{type:String,required:true},
     optionType:{type:String},
     totalGuest:{type:String,required:true},
-    visitingDate:{type:String,required:true}
+    visitingDate:{type:String,required:true},
+    reference: { type: String, unique: true, index: true },
+    status: { type: String, default: 'pending' }
 },{timestamps:true})
 
 const DayPass = mongoose.model('DayPass',daypassSchema,'DayPass')
