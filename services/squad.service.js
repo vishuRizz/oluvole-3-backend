@@ -222,9 +222,9 @@ async function verifyTransaction(reference, bookingDetails = null) {
           payment.voucherApplied = bookingDetails.voucherApplied || '';
           payment.priceAfterVoucher = bookingDetails.priceAfterVoucher || '';
           payment.priceAfterDiscount = bookingDetails.priceAfterDiscount || '';
-          await payment.save();
+          paymentRecord = await payment.save();
         } else {
-          payment = await Payment.create({
+          paymentRecord = payment = await Payment.create({
             name: bookingDetails.name || '',
             amount: transactionAmount,
             status: paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
