@@ -2,9 +2,7 @@ const { asyncErrorHandler } = require('../middlewares/error/error');
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const { RoomTypes, SubRooms } = require('../models/rooms.schema');
 const { paymentModel } = require('../models');
-const {
-  getStoredNightlyAssignments,
-} = require('../utils/nightlyAssignments');
+const { getStoredNightlyAssignments } = require('../utils/nightlyAssignments');
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -55,19 +53,40 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       .json({ error: 'visitDate and endDate are required' });
   }
 
-  // Fetch all bookings
-  const bookings = await overnightBooking.find({});
-  let allRooms = await SubRooms.find({}).populate('roomId');
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
+  const [bookings, allRooms] = await Promise.all([
+    overnightBooking
+      .find({
+        $or: [
+          {
+            'bookingDetails.visitDate': { $lte: endingDate },
+            'bookingDetails.endDate': { $gte: startingDate },
+          },
+          {
+            'bookingDetails.roomAssignments.date': {
+              $gte: startingDate,
+              $lt: endingDate,
+            },
+          },
+        ],
+      })
+      .lean()
+      .select('shortId bookingDetails'),
+    SubRooms.find({}).populate('roomId').lean(),
+  ]);
+
   // FIX N+1 PROBLEM: Fetch all payments in one query
-  const bookingRefs = bookings.map(b => b.shortId).filter(Boolean);
-  const payments = await paymentModel.find({
-    ref: { $in: bookingRefs },
-    status: { $in: ['Success', 'Pending'] }
-  });
-  const paymentMap = new Map(payments.map(p => [p.ref, p]));
+  const bookingRefs = bookings.map((b) => b.shortId).filter(Boolean);
+  const payments = await paymentModel
+    .find({
+      ref: { $in: bookingRefs },
+      status: { $in: ['Success', 'Pending'] },
+    })
+    .lean()
+    .select('ref status');
+  const paymentMap = new Map(payments.map((p) => [p.ref, p]));
 
   const roomOccupancyMap = new Map();
 
