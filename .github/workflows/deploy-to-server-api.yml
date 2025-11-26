@@ -40,8 +40,8 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            cd ~/JaraNewBuildBackend
+            cd /home/prodjara/JaraNewBuildBackend
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
             npm install --production
-            pm2 restart 0 --update-env
+            su - prodjara -c 'cd ~/JaraNewBuildBackend && pm2 restart jara-beach-api-prod --update-env'
