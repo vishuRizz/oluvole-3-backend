@@ -11,6 +11,7 @@ const paymentRoute = require('./payment.router');
 const overnightBookingRoute = require('./overnight.booking.router');
 const daypassBookingRoute = require('./daypass.booking.router');
 const paymentRoutes = require('./paymentRoutes');
+const squadRoute = require('./squad.router');
 
 // SETTINGS
 const termRoute = require('./term.router');
@@ -55,6 +56,7 @@ allRoutes.use('/daypass/discount', DaypassdiscountRoute);
 allRoutes.use('/daypass/voucher', DaypassVoucherRoute);
 allRoutes.use('/payment', paymentRoute);
 allRoutes.use('/payment/paystack', paymentRoutes);
+allRoutes.use('/squad', squadRoute);
 allRoutes.use('/overnight/booking', overnightBookingRoute);
 allRoutes.use('/daypass/booking', daypassBookingRoute);
 allRoutes.use('/club100', club100Route);
