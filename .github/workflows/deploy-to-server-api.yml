@@ -44,4 +44,4 @@ jobs:
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
             npm install --production
-            su - prodjara -c 'cd ~/JaraNewBuildBackend && pm2 restart jara-beach-api-prod --update-env'
+            sudo -u prodjara bash -c 'cd ~/JaraNewBuildBackend && pm2 restart jara-beach-api-prod --update-env'
