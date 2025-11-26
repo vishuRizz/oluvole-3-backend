@@ -65,31 +65,40 @@ const server = app.listen(port, () => {
   }
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, closing server gracefully...');
+// Track active connections for graceful shutdown
+const connections = new Set();
+server.on('connection', (conn) => {
+  connections.add(conn);
+  conn.on('close', () => {
+    connections.delete(conn);
+  });
+});
+
+// Graceful shutdown handler
+const gracefulShutdown = (signal) => {
+  console.log(`${signal} received, closing server gracefully...`);
+
+  // Stop accepting new connections
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
   });
 
+  // Destroy all active connections after 2 seconds
+  setTimeout(() => {
+    console.log(`Destroying ${connections.size} active connections...`);
+    connections.forEach((conn) => conn.destroy());
+  }, 2000);
+
+  // Force exit after 5 seconds if still running
   setTimeout(() => {
     console.error('Forced shutdown after timeout');
     process.exit(1);
   }, 5000);
-});
+};
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-
-  setTimeout(() => {
-    console.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 5000);
-});
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 const del = async () => {
   // await RoomTypes.deleteMany()
