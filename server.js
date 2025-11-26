@@ -65,6 +65,11 @@ const server = app.listen(port, () => {
   }
 });
 
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
 // Track active connections for graceful shutdown
 const connections = new Set();
 server.on('connection', (conn) => {
@@ -78,23 +83,27 @@ server.on('connection', (conn) => {
 const gracefulShutdown = (signal) => {
   console.log(`${signal} received, closing server gracefully...`);
 
+  if (!server.listening) {
+    console.log('Server not listening, exiting immediately');
+    process.exit(0);
+    return;
+  }
+
   // Stop accepting new connections
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
   });
 
-  // Destroy all active connections after 2 seconds
   setTimeout(() => {
     console.log(`Destroying ${connections.size} active connections...`);
     connections.forEach((conn) => conn.destroy());
-  }, 2000);
+  }, 1000);
 
-  // Force exit after 5 seconds if still running
   setTimeout(() => {
     console.error('Forced shutdown after timeout');
     process.exit(1);
-  }, 5000);
+  }, 3000);
 };
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
