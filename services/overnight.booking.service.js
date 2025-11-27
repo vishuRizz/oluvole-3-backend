@@ -1,12 +1,14 @@
 const { overnightBooking } = require('../models/overnight.booking.schema');
 const logger = require('../utils/logger');
-const {
-  normalizeRoomDetails,
-} = require("../utils/nightlyAssignments");
+const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
 const {
   ErrorResponse,
   asyncErrorHandler,
 } = require('../middlewares/error/error');
+const {
+  checkRoomAvailability,
+  checkMultiNightAvailability,
+} = require('../utils/availabilityChecker');
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
 const createBooking = asyncErrorHandler(async (req, res) => {
@@ -29,6 +31,40 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       ...guestDetails,
       photo: fileUrl,
     };
+
+    let availabilityCheck;
+
+    if (roomDetails.multiNightSelections) {
+      availabilityCheck = await checkMultiNightAvailability(
+        roomDetails.multiNightSelections
+      );
+    } else if (
+      roomDetails.selectedRooms &&
+      roomDetails.visitDate &&
+      roomDetails.endDate
+    ) {
+      const roomIds = roomDetails.selectedRooms.map((room) => room.id);
+      availabilityCheck = await checkRoomAvailability(
+        roomIds,
+        roomDetails.visitDate,
+        roomDetails.endDate
+      );
+    }
+
+    if (availabilityCheck && !availabilityCheck.available) {
+      logger.error('Booking blocked due to unavailability', {
+        email: guestDetails.email,
+        conflicts: availabilityCheck.conflicts,
+        message: availabilityCheck.message,
+      });
+
+      return res.status(409).json({
+        success: false,
+        message: availabilityCheck.message,
+        conflicts: availabilityCheck.conflicts,
+        error: 'ROOM_NOT_AVAILABLE',
+      });
+    }
 
     // Multi-night booking transformation
     if (roomDetails.multiNightSelections) {
@@ -63,7 +99,7 @@ const createBooking = asyncErrorHandler(async (req, res) => {
     // Generate or use provided shortId
     let shortIdToUse = ref;
     if (!shortIdToUse) {
-      const { nanoid } = await import("nanoid");
+      const { nanoid } = await import('nanoid');
       shortIdToUse = nanoid(8).toUpperCase();
     }
 
