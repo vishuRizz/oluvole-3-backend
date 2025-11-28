@@ -63,6 +63,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     endingDate.setDate(endingDate.getDate() + 1);
   }
 
+  console.log('🔍 DEBUG: Query dates:', {
+    startingDate: startingDate.toISOString(),
+    endingDate: endingDate.toISOString()
+  });
+
   const [bookings, blockedRooms, allRooms] = await Promise.all([
     overnightBooking
       .find({
@@ -105,6 +110,15 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
   console.log('🔍 DEBUG: Total bookings found:', bookings.length);
   console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
+
+  if (bookings.length > 0) {
+    console.log('🔍 DEBUG: Sample booking:', {
+      shortId: bookings[0].shortId,
+      visitDate: bookings[0].bookingDetails?.visitDate,
+      endDate: bookings[0].bookingDetails?.endDate,
+      hasRoomAssignments: !!bookings[0].bookingDetails?.roomAssignments
+    });
+  }
 
   const roomOccupancyMap = new Map();
 
