@@ -195,6 +195,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
       : 0;
     let paymentStatus = response.data?.data?.transaction_status || 'unknown';
     let paymentRecord = null;
+    let hasConflict = false;
     // Always create payment record, regardless of status
     if (bookingDetails) {
       // If VAT is not provided or invalid, calculate it from the total amount.
@@ -315,6 +316,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
               }
 
               if (availabilityCheck && !availabilityCheck.available) {
+                hasConflict = true;
                 console.error(
                   '❌ SQUAD: Payment successful but rooms are not available - CONFLICT DETECTED!',
                   {
@@ -509,7 +511,59 @@ async function verifyTransaction(reference, bookingDetails = null) {
       }
       // Optionally, rethrow or handle the error as needed
     }
-    // Send confirmation emails (always attempt, even if email is missing)
+    if (hasConflict) {
+      console.log(
+        '⚠️ SQUAD: Skipping customer confirmation email due to booking conflict'
+      );
+      try {
+        await sendEmail(
+          Body.email || guestDetails.email || 'unknown@unknown.com',
+          'Payment Received - Booking Being Processed',
+          'confirmation',
+          {
+            name: guestDetails.firstname || Body?.email || 'Guest',
+            email: Body?.email || 'unknown@unknown.com',
+            id: reference,
+            bookingType: 'Payment Received',
+            checkIn:
+              'Your payment has been received. However, there was an issue with room availability. Our team is reviewing your booking and will contact you shortly.',
+            checkOut: '',
+            numberOfGuests: '',
+            numberOfNights: '',
+            extras: '',
+            subTotal: '',
+            multiNightDiscount: '',
+            clubMemberDiscount: '',
+            multiNightDiscountAvailable: '',
+            vat: '',
+            totalCost: transactionAmount,
+            roomsPrice: '',
+            extrasPrice: '',
+            roomsDiscount: '',
+            discountApplied: '',
+            voucherApplied: '',
+            priceAfterVoucher: '',
+            priceAfterDiscount: '',
+            totalGuests: '',
+          }
+        );
+      } catch (emailError) {
+        console.error(
+          'Failed to send conflict notification email to customer:',
+          emailError
+        );
+      }
+
+      return {
+        status: 'conflict',
+        message:
+          'Payment successful but booking has conflicts - admin notified',
+        data: response.data.data || null,
+        paymentRecord: paymentRecord || null,
+        conflicts: true,
+      };
+    }
+
     const formatPrice = (val) => {
       if (!val || isNaN(val)) return '';
       return `₦${Number(val).toLocaleString()}`;
