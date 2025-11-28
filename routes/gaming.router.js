@@ -1,4 +1,4 @@
-const { create, getAll, del, update } = require('./gaming.service')
+const { create, getAll, del, update } = require('../services/gaming.service')
 
 const router = require('express').Router()
 
