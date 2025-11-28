@@ -177,8 +177,13 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     (endingDate - startingDate) / (1000 * 60 * 60 * 24)
   );
 
+  console.log('🔍 DEBUG: Total rooms before filter:', allRooms.length);
+  console.log('🔍 DEBUG: Rooms in occupancy map:', roomOccupancyMap.size);
+  console.log('🔍 DEBUG: Blocked rooms count:', blockedRooms.length);
+
   const availableRooms = allRooms.filter((room) => {
     const roomId = room._id.toString();
+    const roomTitle = room.roomId?.title || 'Unknown';
 
     if (!roomOccupancyMap.has(roomId)) {
       return true;
@@ -191,6 +196,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       const dateString = currentDate.toISOString().split('T')[0];
 
       if (occupiedDates.has(dateString)) {
+        console.log(`🚫 Room ${roomTitle} (${roomId}) is occupied on ${dateString}`);
         return false;
       }
 
@@ -200,6 +206,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     return true;
   });
 
+  console.log('✅ DEBUG: Available rooms after filter:', availableRooms.length);
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
