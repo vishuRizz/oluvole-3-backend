@@ -42,6 +42,7 @@ const peakOffSeasonalRoute = require('./peakOffSeasonal.router');
 const carServiceRoute = require('./carService.router');
 const adminLogsRoutes = require('./adminLogs.router');
 const club100Route = require('./club100');
+const gamingRoute = require('./gaming.router');
 
 // booking logs routes
 const bookingLogsRoutes = require('./bookingLogs.router');
@@ -89,6 +90,7 @@ allRoutes.use('/blocked/room', blockedRoomRoute);
 allRoutes.use('/peakSeasonal', peakOffSeasonalRoute);
 allRoutes.use('/carService', carServiceRoute);
 allRoutes.use('/get/admin', adminLogsRoutes);
+allRoutes.use('/gaming', gamingRoute);
 
 // booking logs routes
 allRoutes.use('/booking-logs', bookingLogsRoutes);
