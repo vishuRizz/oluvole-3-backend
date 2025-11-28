@@ -103,6 +103,9 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     .select('ref status');
   const paymentMap = new Map(payments.map((p) => [p.ref, p]));
 
+  console.log('🔍 DEBUG: Total bookings found:', bookings.length);
+  console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
+
   const roomOccupancyMap = new Map();
 
   for (const bookingItem of bookings) {
