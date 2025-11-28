@@ -3,6 +3,7 @@ const { overnightBooking } = require('../models/overnight.booking.schema');
 const { RoomTypes, SubRooms } = require('../models/rooms.schema');
 const { paymentModel } = require('../models');
 const { getStoredNightlyAssignments } = require('../utils/nightlyAssignments');
+const BlockedRoom = require('../models/blockedRoom.schema');
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -56,7 +57,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
-  const [bookings, allRooms] = await Promise.all([
+  const [bookings, blockedRooms, allRooms] = await Promise.all([
     overnightBooking
       .find({
         $or: [
@@ -74,6 +75,14 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       })
       .lean()
       .select('shortId bookingDetails'),
+    BlockedRoom.find({
+      date: {
+        $gte: startingDate,
+        $lt: endingDate,
+      },
+    })
+      .lean()
+      .select('roomId date'),
     SubRooms.find({}).populate('roomId').lean(),
   ]);
 
@@ -150,6 +159,18 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
         });
       }
     }
+  }
+
+  for (const blockedRoom of blockedRooms) {
+    const roomId = blockedRoom.roomId.toString();
+    const blockedDate = new Date(blockedRoom.date);
+
+    if (!roomOccupancyMap.has(roomId)) {
+      roomOccupancyMap.set(roomId, new Set());
+    }
+
+    const dateString = blockedDate.toISOString().split('T')[0];
+    roomOccupancyMap.get(roomId).add(dateString);
   }
 
   const numberOfNights = Math.ceil(
