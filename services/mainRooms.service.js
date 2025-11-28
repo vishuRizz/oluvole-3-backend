@@ -57,6 +57,12 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
+  // Fix: If checking single day (same checkin/checkout), treat as 1 night stay
+  if (startingDate.getTime() === endingDate.getTime()) {
+    endingDate = new Date(startingDate);
+    endingDate.setDate(endingDate.getDate() + 1);
+  }
+
   const [bookings, blockedRooms, allRooms] = await Promise.all([
     overnightBooking
       .find({
