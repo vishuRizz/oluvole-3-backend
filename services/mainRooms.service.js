@@ -68,7 +68,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     endingDate: endingDate.toISOString(),
   });
 
-  const [bookings, blockedRooms, allRooms] = await Promise.all([
+  const [bookings, blockedRooms, allRooms, allPayments] = await Promise.all([
     overnightBooking
       .find({
         $or: [
@@ -95,6 +95,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       .lean()
       .select('roomId date'),
     SubRooms.find({}).populate('roomId').lean(),
+    paymentModel.find({}).lean().select('ref status'),
   ]);
 
   // FIX N+1 PROBLEM: Fetch all payments in one query
@@ -112,19 +113,26 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     startingDate: startingDate.toISOString(),
     endingDate: endingDate.toISOString(),
   });
-  console.log('🔍 DEBUG: Total bookings found:', bookings.length);
+  console.log('🔍 DEBUG: Total bookings found (all):', bookings.length);
   console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
+  console.log('🔍 DEBUG: All payment statuses:', allPayments.reduce((acc, p) => {
+    acc[p.status] = (acc[p.status] || 0) + 1;
+    return acc;
+  }, {}));
 
   if (bookings.length > 0) {
-    console.log('🔍 DEBUG: Sample booking:', {
-      shortId: bookings[0].shortId,
-      visitDate: bookings[0].bookingDetails?.visitDate,
-      endDate: bookings[0].bookingDetails?.endDate,
-      hasRoomAssignments: !!bookings[0].bookingDetails?.roomAssignments,
-      roomAssignmentsCount:
-        bookings[0].bookingDetails?.roomAssignments?.length || 0,
-      selectedRoomsCount:
-        bookings[0].bookingDetails?.selectedRooms?.length || 0,
+    console.log('🔍 DEBUG: All bookings in date range:');
+    bookings.forEach((b, idx) => {
+      const payment = allPayments.find(p => p.ref === b.shortId);
+      console.log(`  ${idx + 1}. Booking ${b.shortId}:`, {
+        visitDate: b.bookingDetails?.visitDate,
+        endDate: b.bookingDetails?.endDate,
+        hasRoomAssignments: !!b.bookingDetails?.roomAssignments,
+        roomAssignmentsCount: b.bookingDetails?.roomAssignments?.length || 0,
+        selectedRoomsCount: b.bookingDetails?.selectedRooms?.length || 0,
+        selectedRoomIds: b.bookingDetails?.selectedRooms?.map(r => r.id) || [],
+        paymentStatus: payment?.status || 'NO PAYMENT'
+      });
     });
   }
 
