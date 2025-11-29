@@ -68,13 +68,17 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     endingDate: endingDate.toISOString(),
   });
 
+  // FIX: Convert dates to strings for comparison since DB stores them as strings
+  const startDateString = startingDate.toISOString().split('T')[0];
+  const endDateString = endingDate.toISOString().split('T')[0];
+
   const [bookings, blockedRooms, allRooms, allPayments] = await Promise.all([
     overnightBooking
       .find({
         $or: [
           {
-            'bookingDetails.visitDate': { $lte: endingDate },
-            'bookingDetails.endDate': { $gte: startingDate },
+            'bookingDetails.visitDate': { $lte: endDateString },
+            'bookingDetails.endDate': { $gte: startDateString },
           },
           {
             'bookingDetails.roomAssignments.date': {
