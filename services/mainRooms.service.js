@@ -65,7 +65,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
   console.log('🔍 DEBUG: Query dates:', {
     startingDate: startingDate.toISOString(),
-    endingDate: endingDate.toISOString()
+    endingDate: endingDate.toISOString(),
   });
 
   const [bookings, blockedRooms, allRooms] = await Promise.all([
@@ -108,6 +108,10 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     .select('ref status');
   const paymentMap = new Map(payments.map((p) => [p.ref, p]));
 
+  console.log('🔍 DEBUG: Query Range:', {
+    startingDate: startingDate.toISOString(),
+    endingDate: endingDate.toISOString(),
+  });
   console.log('🔍 DEBUG: Total bookings found:', bookings.length);
   console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
 
@@ -116,7 +120,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       shortId: bookings[0].shortId,
       visitDate: bookings[0].bookingDetails?.visitDate,
       endDate: bookings[0].bookingDetails?.endDate,
-      hasRoomAssignments: !!bookings[0].bookingDetails?.roomAssignments
+      hasRoomAssignments: !!bookings[0].bookingDetails?.roomAssignments,
+      roomAssignmentsCount:
+        bookings[0].bookingDetails?.roomAssignments?.length || 0,
+      selectedRoomsCount:
+        bookings[0].bookingDetails?.selectedRooms?.length || 0,
     });
   }
 
@@ -144,6 +152,9 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       bookingItem.bookingDetails.roomAssignments &&
       bookingItem.bookingDetails.roomAssignments.length > 0
     ) {
+      console.log(
+        `📋 Booking ${bookingItem.shortId} using roomAssignments (${bookingItem.bookingDetails.roomAssignments.length} assignments)`
+      );
       bookingItem.bookingDetails.roomAssignments.forEach((assignment) => {
         const roomId = assignment.roomId.toString();
         const assignmentDate = new Date(assignment.date);
@@ -155,18 +166,22 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
           const dateString = assignmentDate.toISOString().split('T')[0];
           roomOccupancyMap.get(roomId).add(dateString);
+          console.log(`  ✓ Marked room ${roomId} as occupied on ${dateString}`);
         }
       });
     }
     // FALLBACK: Use old selectedRooms logic for backwards compatibility
     else if (bookingItem.bookingDetails.selectedRooms) {
+      console.log(
+        `📋 Booking ${bookingItem.shortId} using selectedRooms (${bookingItem.bookingDetails.selectedRooms.length} rooms)`
+      );
       const visitDate2 = new Date(bookingItem.bookingDetails.visitDate);
       const endDate2 = new Date(bookingItem.bookingDetails.endDate);
 
       // Check if the booking dates overlap with the requested dates
       if (visitDate2 < endingDate && endDate2 > startingDate) {
         bookingItem.bookingDetails.selectedRooms.forEach((selectedRoom) => {
-          const roomId = selectedRoom.id;
+          const roomId = selectedRoom.id.toString();
           if (!roomOccupancyMap.has(roomId)) {
             roomOccupancyMap.set(roomId, new Set());
           }
@@ -177,9 +192,16 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
           while (currentDate < maxDate) {
             const dateString = currentDate.toISOString().split('T')[0];
             roomOccupancyMap.get(roomId).add(dateString);
+            console.log(
+              `  ✓ Marked room ${roomId} (${
+                selectedRoom.title || 'N/A'
+              }) as occupied on ${dateString}`
+            );
             currentDate.setDate(currentDate.getDate() + 1);
           }
         });
+      } else {
+        console.log(`  ⚠️ Booking dates don't overlap with query range`);
       }
     }
   }
@@ -219,7 +241,9 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       const dateString = currentDate.toISOString().split('T')[0];
 
       if (occupiedDates.has(dateString)) {
-        console.log(`🚫 Room ${roomTitle} (${roomId}) is occupied on ${dateString}`);
+        console.log(
+          `🚫 Room ${roomTitle} (${roomId}) is occupied on ${dateString}`
+        );
         return false;
       }
 
