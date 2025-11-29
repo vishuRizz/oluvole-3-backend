@@ -206,6 +206,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     }
   }
 
+  console.log(`🔒 Processing ${blockedRooms.length} blocked room entries`);
   for (const blockedRoom of blockedRooms) {
     const roomId = blockedRoom.roomId.toString();
     const blockedDate = new Date(blockedRoom.date);
@@ -216,6 +217,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
     const dateString = blockedDate.toISOString().split('T')[0];
     roomOccupancyMap.get(roomId).add(dateString);
+    console.log(`  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'})`);
   }
 
   const numberOfNights = Math.ceil(
