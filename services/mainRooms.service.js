@@ -47,7 +47,7 @@ const getAllSubRoom = asyncErrorHandler(async (req, res) => {
 
 const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   console.log('request body', req.body);
-  let { visitDate, endDate } = req.body;
+  let { visitDate, endDate, returnPerNightAvailability } = req.body;
   if (!visitDate || !endDate) {
     return res
       .status(400)
@@ -57,7 +57,6 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   let startingDate = new Date(visitDate);
   let endingDate = new Date(endDate);
 
-  // Fix: If checking single day (same checkin/checkout), treat as 1 night stay
   if (startingDate.getTime() === endingDate.getTime()) {
     endingDate = new Date(startingDate);
     endingDate.setDate(endingDate.getDate() + 1);
@@ -68,7 +67,6 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     endingDate: endingDate.toISOString(),
   });
 
-  // FIX: Convert dates to strings for comparison since DB stores them as strings
   const startDateString = startingDate.toISOString().split('T')[0];
   const endDateString = endingDate.toISOString().split('T')[0];
 
@@ -277,34 +275,85 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   console.log('🔍 DEBUG: Rooms in occupancy map:', roomOccupancyMap.size);
   console.log('🔍 DEBUG: Blocked rooms count:', blockedRooms.length);
 
-  const availableRooms = allRooms.filter((room) => {
-    const roomId = room._id.toString();
-    const roomTitle = room.roomId?.title || 'Unknown';
-
-    if (!roomOccupancyMap.has(roomId)) {
-      return true;
-    }
-
-    const occupiedDates = roomOccupancyMap.get(roomId);
+  if (returnPerNightAvailability) {
+    const nightlyAvailability = {};
 
     let currentDate = new Date(startingDate);
     while (currentDate < endingDate) {
       const dateString = currentDate.toISOString().split('T')[0];
 
-      if (occupiedDates.has(dateString)) {
-        console.log(
-          `🚫 Room ${roomTitle} (${roomId}) is occupied on ${dateString}`
-        );
-        return false;
+      nightlyAvailability[dateString] = allRooms.map((room) => {
+        const roomId = room._id.toString();
+        const bookedDatesForThisRoom = roomOccupancyMap.get(roomId) || new Set();
+        const isOccupied = bookedDatesForThisRoom.has(dateString);
+
+        const groupedRooms = {
+          title: room.title,
+          booked: isOccupied,
+          capacity: isOccupied ? 0 : room.availableRoom,
+          availableRoom: isOccupied ? 0 : room.availableRoom,
+          id: room._id,
+          _id: room._id,
+          adults: room.adults,
+          children: room.children,
+          infant: room.infant,
+          toddler: room.toddler,
+          roomId: room.roomId
+        };
+
+        return groupedRooms;
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    console.log('✅ DEBUG: Returning per-night availability');
+    return res.status(200).json({ nightlyAvailability });
+  }
+
+  const availableRooms = allRooms.map((room) => {
+    const roomId = room._id.toString();
+    const roomTitle = room.roomId?.title || 'Unknown';
+    const bookedDatesForThisRoom = roomOccupancyMap.get(roomId) || new Set();
+
+    let availableNights = 0;
+    let occupiedNights = 0;
+    const occupiedDatesArray = [];
+
+    let currentDate = new Date(startingDate);
+    while (currentDate < endingDate) {
+      const dateString = currentDate.toISOString().split('T')[0];
+
+      if (bookedDatesForThisRoom.has(dateString)) {
+        occupiedNights++;
+        occupiedDatesArray.push(dateString);
+      } else {
+        availableNights++;
       }
 
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    return true;
+    const totalNights = numberOfNights;
+    const isFullyAvailable = occupiedNights === 0;
+
+    if (!isFullyAvailable) {
+      console.log(
+        `🚫 Room ${roomTitle} (${roomId}) is occupied on: ${occupiedDatesArray.join(', ')}`
+      );
+    }
+
+    return {
+      ...room,
+      booked: !isFullyAvailable,
+      availableRoom: isFullyAvailable ? room.availableRoom : 0,
+      availableNights,
+      totalNights,
+      occupiedDates: occupiedDatesArray
+    };
   });
 
-  console.log('✅ DEBUG: Available rooms after filter:', availableRooms.length);
+  console.log('✅ DEBUG: Total rooms after processing:', availableRooms.length);
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
