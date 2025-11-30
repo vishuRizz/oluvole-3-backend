@@ -119,23 +119,27 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   });
   console.log('🔍 DEBUG: Total bookings found (all):', bookings.length);
   console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
-  console.log('🔍 DEBUG: All payment statuses:', allPayments.reduce((acc, p) => {
-    acc[p.status] = (acc[p.status] || 0) + 1;
-    return acc;
-  }, {}));
+  console.log(
+    '🔍 DEBUG: All payment statuses:',
+    allPayments.reduce((acc, p) => {
+      acc[p.status] = (acc[p.status] || 0) + 1;
+      return acc;
+    }, {})
+  );
 
   if (bookings.length > 0) {
     console.log('🔍 DEBUG: All bookings in date range:');
     bookings.forEach((b, idx) => {
-      const payment = allPayments.find(p => p.ref === b.shortId);
+      const payment = allPayments.find((p) => p.ref === b.shortId);
       console.log(`  ${idx + 1}. Booking ${b.shortId}:`, {
         visitDate: b.bookingDetails?.visitDate,
         endDate: b.bookingDetails?.endDate,
         hasRoomAssignments: !!b.bookingDetails?.roomAssignments,
         roomAssignmentsCount: b.bookingDetails?.roomAssignments?.length || 0,
         selectedRoomsCount: b.bookingDetails?.selectedRooms?.length || 0,
-        selectedRoomIds: b.bookingDetails?.selectedRooms?.map(r => r.id) || [],
-        paymentStatus: payment?.status || 'NO PAYMENT'
+        selectedRoomIds:
+          b.bookingDetails?.selectedRooms?.map((r) => r.id) || [],
+        paymentStatus: payment?.status || 'NO PAYMENT',
       });
     });
   }
@@ -181,6 +185,35 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
           console.log(`  ✓ Marked room ${roomId} as occupied on ${dateString}`);
         }
       });
+    } else if (
+      bookingItem.bookingDetails.multiNightSelections &&
+      Object.keys(bookingItem.bookingDetails.multiNightSelections).length > 0
+    ) {
+      console.log(
+        `📋 Booking ${bookingItem.shortId} using multiNightSelections (${
+          Object.keys(bookingItem.bookingDetails.multiNightSelections).length
+        } nights)`
+      );
+      Object.entries(bookingItem.bookingDetails.multiNightSelections).forEach(
+        ([dateString, rooms]) => {
+          const nightDate = new Date(dateString + 'T00:00:00.000Z');
+
+          if (nightDate >= startingDate && nightDate < endingDate) {
+            rooms.forEach((roomSelection) => {
+              const roomId = roomSelection.roomId.toString();
+              if (!roomOccupancyMap.has(roomId)) {
+                roomOccupancyMap.set(roomId, new Set());
+              }
+              roomOccupancyMap.get(roomId).add(dateString);
+              console.log(
+                `  ✓ Marked room ${roomId} (${
+                  roomSelection.room?.title || 'N/A'
+                }) as occupied on ${dateString}`
+              );
+            });
+          }
+        }
+      );
     }
     // FALLBACK: Use old selectedRooms logic for backwards compatibility
     else if (bookingItem.bookingDetails.selectedRooms) {
@@ -229,7 +262,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
     const dateString = blockedDate.toISOString().split('T')[0];
     roomOccupancyMap.get(roomId).add(dateString);
-    console.log(`  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'})`);
+    console.log(
+      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${
+        blockedRoom.description || 'N/A'
+      })`
+    );
   }
 
   const numberOfNights = Math.ceil(
