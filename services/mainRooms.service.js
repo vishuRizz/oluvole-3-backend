@@ -89,10 +89,8 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       .lean()
       .select("shortId bookingDetails"),
     BlockedRoom.find({
-      date: {
-        $gte: startingDate,
-        $lt: endingDate,
-      },
+      arrivalDate: { $lt: endingDate },
+      departureDate: { $gt: startingDate },
     })
       .lean()
       .select("roomId date"),
