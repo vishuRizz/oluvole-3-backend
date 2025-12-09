@@ -1,12 +1,14 @@
-const { overnightBooking } = require("../models/overnight.booking.schema");
-const logger = require("../utils/logger");
-const {
-  normalizeRoomDetails,
-} = require("../utils/nightlyAssignments");
+const { overnightBooking } = require('../models/overnight.booking.schema');
+const logger = require('../utils/logger');
+const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
 const {
   ErrorResponse,
   asyncErrorHandler,
-} = require("../middlewares/error/error");
+} = require('../middlewares/error/error');
+const {
+  checkRoomAvailability,
+  checkMultiNightAvailability,
+} = require('../utils/availabilityChecker');
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
 const createBooking = asyncErrorHandler(async (req, res) => {
@@ -16,12 +18,12 @@ const createBooking = asyncErrorHandler(async (req, res) => {
     roomDetails = JSON.parse(roomDetails);
     roomDetails = normalizeRoomDetails(roomDetails);
     const file = req.file;
-    const fileData = file ? file.filename : "no file";
+    const fileData = file ? file.filename : 'no file';
     if (!guestCount || !guestDetails || !roomDetails || !file) {
-      logger.error("Invalid Booking Data", { body: req.body, file: fileData });
-      throw new ErrorResponse("Invalid request", 400);
+      logger.error('Invalid Booking Data', { body: req.body, file: fileData });
+      throw new ErrorResponse('Invalid request', 400);
     }
-    logger.info("Booking initiated", { email: guestDetails.email });
+    logger.info('Booking initiated', { email: guestDetails.email });
     const fileUrl = file
       ? `${process.env.SERVER_BASEURL}/uploads/${file.filename}`
       : null;
@@ -30,9 +32,74 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       photo: fileUrl,
     };
 
+    let availabilityCheck;
+
+    if (roomDetails.multiNightSelections) {
+      availabilityCheck = await checkMultiNightAvailability(
+        roomDetails.multiNightSelections
+      );
+    } else if (
+      roomDetails.selectedRooms &&
+      roomDetails.visitDate &&
+      roomDetails.endDate
+    ) {
+      const roomIds = roomDetails.selectedRooms.map((room) => room.id);
+      availabilityCheck = await checkRoomAvailability(
+        roomIds,
+        roomDetails.visitDate,
+        roomDetails.endDate
+      );
+    }
+
+    if (availabilityCheck && !availabilityCheck.available) {
+      logger.error('Booking blocked due to unavailability', {
+        email: guestDetails.email,
+        conflicts: availabilityCheck.conflicts,
+        message: availabilityCheck.message,
+      });
+
+      return res.status(409).json({
+        success: false,
+        message: availabilityCheck.message,
+        conflicts: availabilityCheck.conflicts,
+        error: 'ROOM_NOT_AVAILABLE',
+      });
+    }
+
+    // Multi-night booking transformation
+    if (roomDetails.multiNightSelections) {
+      const roomAssignments = [];
+
+      Object.entries(roomDetails.multiNightSelections).forEach(
+        ([date, selections]) => {
+          selections.forEach((selection) => {
+            roomAssignments.push({
+              roomId: selection.roomId,
+              date: new Date(date),
+              roomDetails: {
+                title: selection.room?.title,
+                groupRef: selection.room?.groupRef,
+                price: selection.room?.price,
+                capacity: selection.room?.capacity,
+                guests: selection.guests,
+              },
+            });
+          });
+        }
+      );
+
+      roomDetails.roomAssignments = roomAssignments;
+
+      logger.info('Multi-night booking processed', {
+        totalNights: Object.keys(roomDetails.multiNightSelections).length,
+        totalRoomAssignments: roomAssignments.length,
+      });
+    }
+
+    // Generate or use provided shortId
     let shortIdToUse = ref;
     if (!shortIdToUse) {
-      const { nanoid } = await import("nanoid");
+      const { nanoid } = await import('nanoid');
       shortIdToUse = nanoid(8).toUpperCase();
     }
 
@@ -45,7 +112,7 @@ const createBooking = asyncErrorHandler(async (req, res) => {
 
     res.status(200).json(create);
   } catch (error) {
-    logger.error("Error creating booking", {
+    logger.error('Error creating booking', {
       error: error.message,
       stack: error.stack,
       body: req.body,
@@ -65,23 +132,23 @@ const getBookingByRef = asyncErrorHandler(async (req, res) => {
   // Attempt to find the booking by either _id or shortId
   const booking = await overnightBooking.findOne({ shortId: ref });
   if (!booking) {
-    throw new ErrorResponse("Booking not found", 404);
+    throw new ErrorResponse('Booking not found', 404);
   }
   res.status(200).json(booking);
 });
 
 const deletAllBooking = asyncErrorHandler(async (req, res) => {
   await overnightBooking.deleteMany({});
-  res.status(200).json({ message: "All booking deleted" });
+  res.status(200).json({ message: 'All booking deleted' });
 });
 
 const deleteBookingByRef = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
   const booking = await overnightBooking.findOneAndDelete({ shortId: ref });
   if (!booking) {
-    throw new ErrorResponse("Booking not found", 404);
+    throw new ErrorResponse('Booking not found', 404);
   }
-  res.status(200).json({ message: "Booking deleted" });
+  res.status(200).json({ message: 'Booking deleted' });
 });
 
 const updateBooking = asyncErrorHandler(async (req, res) => {
@@ -99,11 +166,40 @@ const updateBooking = asyncErrorHandler(async (req, res) => {
     photo: fileUrl,
   };
 
+  if (roomDetails.multiNightSelections) {
+    const roomAssignments = [];
+
+    Object.entries(roomDetails.multiNightSelections).forEach(
+      ([date, selections]) => {
+        selections.forEach((selection) => {
+          roomAssignments.push({
+            roomId: selection.roomId,
+            date: new Date(date),
+            roomDetails: {
+              title: selection.room?.title,
+              groupRef: selection.room?.groupRef,
+              price: selection.room?.price,
+              capacity: selection.room?.capacity,
+              guests: selection.guests,
+            },
+          });
+        });
+      }
+    );
+
+    roomDetails.roomAssignments = roomAssignments;
+
+    logger.info('Multi-night booking update processed', {
+      totalNights: Object.keys(roomDetails.multiNightSelections).length,
+      totalRoomAssignments: roomAssignments.length,
+    });
+  }
+
   let booking = await overnightBooking.findOne(
     { shortId: ref } // Allow fetching by either _id or shortId
   );
   if (!booking) {
-    throw new ErrorResponse("Booking not found", 404);
+    throw new ErrorResponse('Booking not found', 404);
   }
 
   booking.totalGuest = guestCount;
