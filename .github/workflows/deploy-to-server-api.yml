@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - ci
-      - main
-      - fix/overnight
 
 jobs:
   # test:
@@ -42,6 +40,9 @@ jobs:
           script: |
             cd /home/prodjara/JaraNewBuildBackend
             git fetch origin
-            git reset --hard origin/${{ github.ref_name }}
+            git reset --hard origin/ci    # always deploy ci
             npm install --production
-            sudo -u prodjara bash -c 'cd ~/JaraNewBuildBackend && pm2 restart jara-beach-api-prod --update-env'
+            sudo -u prodjara bash -c '
+              cd /home/prodjara/JaraNewBuildBackend
+              pm2 restart jara-beach-api-prod --update-env
+            '
