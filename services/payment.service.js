@@ -1,33 +1,40 @@
 const {
   asyncErrorHandler,
   ErrorResponse,
-} = require("../middlewares/error/error");
-const logger = require("../utils/logger");
-const { paymentModel } = require("../models");
-const { loyaltyCoinModel } = require("../models/loyaltyPoints");
-const { statusCode } = require("../utils/statusCode");
-const { sendEmail } = require("../config/mail.config");
-const { SubRooms } = require("../models/rooms.schema");
+} = require('../middlewares/error/error');
+const logger = require('../utils/logger');
+const { paymentModel } = require('../models');
+const { loyaltyCoinModel } = require('../models/loyaltyPoints');
+const { statusCode } = require('../utils/statusCode');
+const { sendEmail } = require('../config/mail.config');
+const { SubRooms } = require('../models/rooms.schema');
 const BookingLog = require('../models/bookingLog.schema.js');
+const BookingLogger = require('../services/bookingLogger.service');
+const {
+  checkRoomAvailability,
+  checkMultiNightAvailability,
+} = require('../utils/availabilityChecker');
+const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
 
 function formatDate(dateString) {
   const date = new Date(dateString);
   const day = date.getDate();
   const v = day % 100;
-  const suffix = (v - 20) % 10 === 1
-    ? "st"
-    : (v - 20) % 10 === 2
-    ? "nd"
-    : (v - 20) % 10 === 3
-    ? "rd"
-    : v === 1
-    ? "st"
-    : v === 2
-    ? "nd"
-    : v === 3
-    ? "rd"
-    : "th";
-  const month = date.toLocaleString("en-US", { month: "long" });
+  const suffix =
+    (v - 20) % 10 === 1
+      ? 'st'
+      : (v - 20) % 10 === 2
+      ? 'nd'
+      : (v - 20) % 10 === 3
+      ? 'rd'
+      : v === 1
+      ? 'st'
+      : v === 2
+      ? 'nd'
+      : v === 3
+      ? 'rd'
+      : 'th';
+  const month = date.toLocaleString('en-US', { month: 'long' });
   const year = date.getFullYear();
   return `${day}${suffix},${month.toLowerCase()} ${year}`;
 }
@@ -48,13 +55,13 @@ const calculateNumberOfNights = (visitDate, endDate) => {
 };
 const counting = (guestCount) => {
   const numChildren = guestCount?.ages?.filter((age) =>
-    age.includes("child")
+    age.includes('child')
   ).length;
   const numToddlers = guestCount?.ages?.filter((age) =>
-    age.includes("toddler")
+    age.includes('toddler')
   ).length;
   const numInfants = guestCount?.ages?.filter((age) =>
-    age.includes("infant")
+    age.includes('infant')
   ).length;
 
   return {
@@ -66,34 +73,119 @@ const counting = (guestCount) => {
 };
 
 const create = asyncErrorHandler(async (req, res) => {
-  // console.log(req.body);
+  let createDaypass;
   try {
-    logger.info("Processing payment request", { requestBody: req.body });
+    logger.info('Processing payment request', { requestBody: req.body });
     const guestDetails = JSON.parse(req.body.guestDetails);
-    const roomDetails = JSON.parse(req.body.roomDetails);
+    let roomDetails = JSON.parse(req.body.roomDetails);
     const bookingInfo = req.body.bookingInfo
       ? JSON.parse(req.body.bookingInfo)
       : null;
-    // const costBreakDown = JSON.parse(req.body.CostBreakDown);
+
     if (!guestDetails || !roomDetails) {
-      logger.error("Invalid payment data", { guestDetails, roomDetails });
-      throw new ErrorResponse("Invalid payment data", 400);
+      logger.error('Invalid payment data', { guestDetails, roomDetails });
+      throw new ErrorResponse('Invalid payment data', 400);
     }
+
+    roomDetails = normalizeRoomDetails(roomDetails);
+    let availabilityCheck;
+
+    if (roomDetails.multiNightSelections) {
+      availabilityCheck = await checkMultiNightAvailability(
+        roomDetails.multiNightSelections
+      );
+    } else if (
+      roomDetails.selectedRooms &&
+      roomDetails.visitDate &&
+      roomDetails.endDate
+    ) {
+      const roomIds = roomDetails.selectedRooms.map((room) => room.id);
+      availabilityCheck = await checkRoomAvailability(
+        roomIds,
+        roomDetails.visitDate,
+        roomDetails.endDate
+      );
+    }
+
+    if (availabilityCheck && !availabilityCheck.available) {
+      logger.error('Payment blocked due to room unavailability', {
+        email: guestDetails.email,
+        conflicts: availabilityCheck.conflicts,
+        message: availabilityCheck.message,
+      });
+
+      return res.status(409).json({
+        success: false,
+        message: availabilityCheck.message,
+        conflicts: availabilityCheck.conflicts,
+        error: 'ROOM_NOT_AVAILABLE',
+      });
+    }
+
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
-    let createDaypass = await paymentModel.create(req.body);
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
 
-    //GENERATE LOYALTY POINTS========
+    // Create payment record
+    createDaypass = await paymentModel.create(req.body);
+
+    if (!createDaypass) {
+      logger.error('Failed to create payment record');
+      throw new ErrorResponse('Failed To Create Payment', 404);
+    }
+
+    // Create booking log for successful payment
     try {
-      let amount = createDaypass.amount
-      const guestDetails = JSON.parse(createDaypass.guestDetails);
+      await BookingLogger.logBookingAttempt({
+        bookingId: createDaypass._id,
+        userId: guestDetails.email,
+        status: 'success', // Assuming payment success means booking attempt is successful
+        paymentStatus: 'success',
+        paymentGateway: 'Paystack', // Or paymentGateway from req.body if available
+        paymentId: createDaypass.paymentId,
+        amount: createDaypass.amount,
+        currency: createDaypass.currency,
+        bookingDetails: req.body, // Log the raw request body for details
+        requestPayload: req.body,
+        ipAddress: req.ip || 'Unknown',
+        userAgent: req.get('User-Agent') || 'Unknown',
+      });
+      logger.info('Successful payment booking log created', {
+        bookingId: createDaypass._id,
+      });
+    } catch (bookingLogError) {
+      logger.error('Failed to create successful payment booking log', {
+        error: bookingLogError.message,
+        paymentId: createDaypass._id,
+      });
+      // Log payment success but booking failure using the dedicated service
+      try {
+        await BookingLogger.logPaymentSuccessBookingFailure(
+          createDaypass,
+          bookingLogError
+        );
+        logger.info('Logged payment success, booking failed', {
+          paymentId: createDaypass._id,
+        });
+      } catch (logError) {
+        logger.error('Failed to log payment success/booking failure', {
+          originalError: bookingLogError.message,
+          loggingError: logError.message,
+        });
+      }
+      // Throw error to indicate booking process failed despite payment success
+      throw new ErrorResponse('Payment successful but booking failed', 500);
+    }
+
+    // Generate loyalty points (keep in try catch as before, but ensure it doesn't prevent response if it fails)
+    try {
+      let amount = createDaypass.amount;
       let email = guestDetails.email;
 
       if (createDaypass.status === 'Success') {
@@ -103,169 +195,188 @@ const create = asyncErrorHandler(async (req, res) => {
           loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
           loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
           await loyaltyRecord.save();
-          logger.info("Loyalty points updated", { email, totalSpent: loyaltyRecord.totalSpent, points: loyaltyRecord.points });
+          logger.info('Loyalty points updated', {
+            email,
+            totalSpent: loyaltyRecord.totalSpent,
+            points: loyaltyRecord.points,
+          });
         } else {
           const points = Math.floor(amount / 10000);
           const newLoyalty = new loyaltyCoinModel({
             email,
             totalSpent: amount,
             points: points,
-            redeemable: points >= 50
+            redeemable: points >= 50,
           });
           await newLoyalty.save();
-          logger.info("Loyalty record created", { email, totalSpent: amount, points: newLoyalty.points });
+          logger.info('Loyalty record created', {
+            email,
+            totalSpent: amount,
+            points: newLoyalty.points,
+          });
         }
       }
-    } catch (error) {
-      console.log('error while generating loyalty points:', error)
+    } catch (loyaltyError) {
+      logger.error('Error while generating loyalty points:', loyaltyError);
+      // Continue execution even if loyalty points generation fails
     }
 
-    if (createDaypass) {
-      logger.info("Payment successfully created", {
-        payment: createDaypass._id,
-      });
-      // Log booking creation success
-      await BookingLog.create({
-        bookingId: createDaypass._id,
-        userId: guestDetails.email,
-        status: "success",
-        paymentStatus: 'success',
-        paymentGateway: "Paystack",
-        paymentId: createDaypass.paymentId,
-        amount: createDaypass.amount,
-        currency: createDaypass.currency,
-        bookingDetails: req.body,
-        requestPayload: req.body,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-      });
-      res.status(statusCode.accepted).json(createDaypass);
-      const emailContext = {
-        name: req.body.name,
-        email: guestDetails.email,
-        id: req.body.ref,
-        bookingType:
-          (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
-            ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
-            : "Day Pass",
-        checkIn: roomDetails?.visitDate
-          ? `${formatDate(roomDetails?.visitDate)}`
-          : `${formatDate(roomDetails?.startDate)}`,
-        checkOut: roomDetails?.endDate
-          ? `${formatDate(roomDetails?.endDate)}`
-          : `${formatDate(roomDetails?.startDate)}`,
-        numberOfGuests: roomDetails?.visitDate
-          ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
-          0
-          } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
-          0
-          } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+    // Send emails (keep in try catch as before)
+    const emailContext = {
+      name: req.body.name,
+      email: guestDetails.email,
+      id: req.body.ref,
+      bookingType:
+        roomDetails?.selectedRooms?.map((room) => room.title).join(', ') ||
+        'Day Pass',
+      checkIn: roomDetails?.visitDate
+        ? formatDate(roomDetails?.visitDate)
+        : roomDetails?.startDate
+        ? formatDate(roomDetails?.startDate)
+        : roomDetails?.startDate,
+      checkOut: roomDetails?.endDate
+        ? formatDate(roomDetails?.endDate)
+        : roomDetails?.startDate
+        ? formatDate(roomDetails?.startDate)
+        : roomDetails?.startDate,
+      numberOfGuests: roomDetails?.visitDate
+        ? `${
+            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+          } Adults, ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+          } Children ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+          } Toddlers ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
           } Infants`
-          : bookingInfo
-            ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-            : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
-            } Children`,
-        numberOfNights: roomDetails?.visitDate
-          ? calculateNumberOfNights(
-            roomDetails?.visitDate,
-            roomDetails?.endDate
-          )
-          : "Day Pass",
-        extras:
-          roomDetails?.visitDate && roomDetails?.finalData
-            ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
-            : roomDetails?.startDate && roomDetails?.extras
-              ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-              : "No Extras",
-        subTotal: formatPrice(req.body.subTotal),
-        multiNightDiscount: req.body.discount.toLocaleString(),
-        clubMemberDiscount: req.body.voucher,
-        multiNightDiscountAvailable: req.body.multiNightDiscount
-          ? req.body.multiNightDiscount
-          : 0,
-        vat: formatPrice(req.body.vat),
-        totalCost: formatPrice(req.body.totalCost),
-        roomsPrice:
-          req.body.roomsPrice == "Daypass"
-            ? req.body.roomsPrice
-            : formatPrice(req.body.roomsPrice),
-        extrasPrice: formatPrice(req.body.extrasPrice),
-        roomsDiscount:
-          req.body.roomsDiscount == "Daypass"
-            ? req.body.roomsDiscount
-            : formatPrice(req.body.roomsDiscount),
-        discountApplied: req.body.discountApplied
-          ? req.body.discountApplied == "true"
-            ? "Yes"
-            : "No"
-          : "",
-        voucherApplied: req.body.voucherApplied
-          ? req.body.voucherApplied == "true"
-            ? "Yes"
-            : "No"
-          : "",
-        priceAfterVoucher: req.body.priceAfterVoucher
-          ? formatPrice(req.body.priceAfterVoucher)
-          : formatPrice(req.body.subTotal),
-        priceAfterDiscount: req.body.priceAfterDiscount
-          ? formatPrice(req.body.priceAfterDiscount)
-          : formatPrice(req.body.subTotal),
-        totalGuests: totalGuests,
-      };
-      if (req.body.status === "Pending") {
-        sendEmail(
+        : bookingInfo
+        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+        : `${roomDetails?.adultsCount ?? 0} Adults, ${
+            roomDetails?.childrenCount ?? 0
+          } Children`,
+      numberOfNights: roomDetails?.visitDate
+        ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
+        : 'Day Pass',
+      extras:
+        roomDetails?.visitDate && roomDetails?.finalData
+          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
+          : roomDetails?.startDate && roomDetails?.extras
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+          : 'No Extras',
+      subTotal: formatPrice(req.body.subTotal),
+      multiNightDiscount: req.body.discount.toLocaleString(),
+      clubMemberDiscount: req.body.voucher,
+      multiNightDiscountAvailable: req.body.multiNightDiscount
+        ? req.body.multiNightDiscount
+        : 0,
+      vat: formatPrice(req.body.vat),
+      totalCost: formatPrice(req.body.totalCost),
+      roomsPrice:
+        req.body.roomsPrice == 'Daypass'
+          ? req.body.roomsPrice
+          : formatPrice(req.body.roomsPrice),
+      extrasPrice: formatPrice(req.body.extrasPrice),
+      roomsDiscount:
+        req.body.roomsDiscount == 'Daypass'
+          ? req.body.roomsDiscount
+          : formatPrice(req.body.roomsDiscount),
+      discountApplied: req.body.discountApplied
+        ? req.body.discountApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : '',
+      voucherApplied: req.body.voucherApplied
+        ? req.body.voucherApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : '',
+      priceAfterVoucher: req.body.priceAfterVoucher
+        ? formatPrice(req.body.priceAfterVoucher)
+        : formatPrice(req.body.subTotal),
+      priceAfterDiscount: req.body.priceAfterDiscount
+        ? formatPrice(req.body.priceAfterDiscount)
+        : formatPrice(req.body.subTotal),
+      totalGuests: totalGuests,
+    };
+
+    try {
+      if (req.body.status === 'Pending') {
+        await sendEmail(
           guestDetails.email,
-          "Your Booking Is Pending",
-          "pending_payment",
+          'Your Booking Is Pending',
+          'pending_payment',
           emailContext
         );
-        sendEmail(
-          "bookings@jarabeachresort.com",
-          "New Booking Pending",
-          "pending_payment",
+        await sendEmail(
+          'bookings@jarabeachresort.com',
+          'New Booking Pending',
+          'pending_payment',
+          emailContext
+        );
+      } else if (req.body.status === 'Success') {
+        await sendEmail(
+          guestDetails.email,
+          'Your Booking Is Confirmed',
+          'confirmation',
+          emailContext
+        );
+        await sendEmail(
+          'bookings@jarabeachresort.com',
+          'New Booking Confirmed',
+          'confirmation',
           emailContext
         );
       }
-      else if (req.body.status === "Success") {
-        sendEmail(
-          guestDetails.email,
-          "Your Booking Is Confirmed",
-          "confirmation",
-          emailContext
-        );
-        sendEmail(
-          "bookings@jarabeachresort.com",
-          "New Booking Confirmed",
-          "confirmation",
-          emailContext
-        );
-      }
-    } else {
-      // Log booking failure
-      await BookingLog.create({
-        bookingId: req.body.ref,
-        userId: req.body.guestDetails ? JSON.parse(req.body.guestDetails).email : "Unknown",
-        status: "failed",
-        paymentStatus: "failed",
-        paymentGateway: "Paystack",
-        errorDetails: {
-          errorMessage: error.message,
-          stackTrace: error.stack,
-          failedStep: "Payment Creation"
-        },
-        requestPayload: req.body,
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
-      });
-      throw new ErrorResponse("Failed To Create Payment", 404);
+    } catch (emailError) {
+      logger.error('Failed to send emails', { error: emailError.message });
+      // Continue execution even if email sending fails
     }
+
+    // Only send success response if booking log was created successfully
+    res.status(statusCode.accepted).json(createDaypass);
   } catch (error) {
-    logger.error("Error during payment creation", {
+    logger.error('Error during payment creation or subsequent process', {
       error: error.message,
       stack: error.stack,
+      paymentId: createDaypass?._id || 'N/A', // Log payment ID if available
     });
-    throw new ErrorResponse("Failed To Create Payment", 404);
+
+    // Log failed booking process if not already logged as payment success/booking failure
+    if (error.message !== 'Payment successful but booking failed') {
+      try {
+        await BookingLogger.logBookingAttempt({
+          bookingId: req.body.ref || 'N/A', // Use ref or N/A
+          userId: req.body.guestDetails
+            ? JSON.parse(req.body.guestDetails).email
+            : 'Unknown',
+          status: 'failed',
+          paymentStatus: createDaypass?.status || 'failed',
+          paymentGateway: 'Paystack',
+          paymentId: createDaypass?.paymentId || 'N/A',
+          amount: createDaypass?.amount || req.body.amount || 0,
+          currency: createDaypass?.currency || req.body.currency || 'N/A',
+          errorDetails: {
+            errorMessage: error.message,
+            stackTrace: error.stack,
+            failedStep: 'Payment Processing',
+          },
+          requestPayload: req.body,
+          ipAddress: req.ip || 'Unknown',
+          userAgent: req.get('User-Agent') || 'Unknown',
+        });
+        logger.info('Logged general failed booking process', {
+          bookingId: req.body.ref || 'N/A',
+        });
+      } catch (logError) {
+        logger.error('Failed to create general failed booking log', {
+          originalError: error.message,
+          loggingError: logError.message,
+        });
+      }
+    }
+
+    // Re-throw the error after logging
+    throw error;
   }
 });
 
@@ -274,7 +385,7 @@ const getAll = asyncErrorHandler(async (req, res) => {
   if (allDaypass.length > 0) {
     res.status(statusCode.accepted).json(allDaypass);
   } else {
-    throw new ErrorResponse("No Payment Found", 404);
+    throw new ErrorResponse('No Payment Found', 404);
   }
 });
 
@@ -283,31 +394,62 @@ const getSingle = asyncErrorHandler(async (req, res) => {
   if (daypass) {
     res.status(statusCode.accepted).json(daypass);
   } else {
-    throw new ErrorResponse("No Payment Found", 404);
+    throw new ErrorResponse('No Payment Found', 404);
   }
 });
 const deletePaymentAll = asyncErrorHandler(async (req, res) => {
   await paymentModel.deleteMany({});
-  res.status(statusCode.accepted).json({ message: "All Payments Deleted" });
+  res.status(statusCode.accepted).json({ message: 'All Payments Deleted' });
 });
 
 const deletByBookingId = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
   let daypass = await paymentModel.findOneAndDelete({ ref: id });
   if (daypass) {
-    res.status(statusCode.accepted).json({ message: "Payment Deleted" });
+    res.status(statusCode.accepted).json({ message: 'Payment Deleted' });
   } else {
-    throw new ErrorResponse("No Payment Found", 404);
+    throw new ErrorResponse('No Payment Found', 404);
   }
 });
 
 const getByBookingId = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
+
+  console.log('🔍 PAYMENT: getByBookingId called with id:', id);
+  console.log('🔍 PAYMENT: id type:', typeof id);
+
   let daypass = await paymentModel.find({ ref: id });
+
+  console.log(
+    '🔍 PAYMENT: Database query result:',
+    daypass ? `${daypass.length} records found` : 'No records found'
+  );
+  if (daypass && daypass.length > 0) {
+    console.log(
+      '✅ PAYMENT: Found payment records:',
+      daypass.map((p) => ({
+        id: p._id,
+        ref: p.ref,
+        status: p.status,
+        method: p.method,
+      }))
+    );
+  } else {
+    console.log('❌ PAYMENT: No payment found with ref:', id);
+    // Let's also check if there are any payments with similar patterns
+    const allPayments = await paymentModel.find({}).limit(5);
+    console.log(
+      '🔍 PAYMENT: Sample of existing refs:',
+      allPayments.map((p) => p.ref)
+    );
+  }
+
   if (daypass) {
+    console.log('✅ PAYMENT: Returning payment data for id:', id);
     res.status(statusCode.accepted).json(daypass);
   } else {
-    throw new ErrorResponse("No Payment Found", 404);
+    console.log('❌ PAYMENT: Throwing 404 error for id:', id);
+    throw new ErrorResponse('No Payment Found', 404);
   }
 });
 
@@ -316,13 +458,12 @@ const confirm = asyncErrorHandler(async (req, res) => {
   const { bank } = req.body;
   let payment = await paymentModel.findOne({ ref });
   if (payment) {
-    payment.status = "Success"; // Update the status to confirm
+    payment.status = 'Success'; // Update the status to confirm
     payment.method = `Bank Transfer ${bank}`;
     await payment.save();
 
-
     if (payment) {
-      let amount = payment.amount
+      let amount = payment.amount;
       const guestDetails = JSON.parse(payment.guestDetails);
       let email = guestDetails.email;
       let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
@@ -331,20 +472,27 @@ const confirm = asyncErrorHandler(async (req, res) => {
         loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
         loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
         await loyaltyRecord.save();
-        logger.info("Loyalty points updated", { email, totalSpent: loyaltyRecord.totalSpent, points: loyaltyRecord.points });
+        logger.info('Loyalty points updated', {
+          email,
+          totalSpent: loyaltyRecord.totalSpent,
+          points: loyaltyRecord.points,
+        });
       } else {
         const points = Math.floor(amount / 10000);
         const newLoyalty = new loyaltyCoinModel({
           email,
           totalSpent: amount,
           points: points,
-          redeemable: points >= 50
+          redeemable: points >= 50,
         });
         await newLoyalty.save();
-        logger.info("Loyalty record created", { email, totalSpent: amount, points: newLoyalty.points });
+        logger.info('Loyalty record created', {
+          email,
+          totalSpent: amount,
+          points: newLoyalty.points,
+        });
       }
     }
-
 
     res.status(statusCode.accepted).json(payment);
     const guestDetails = JSON.parse(payment.guestDetails);
@@ -354,47 +502,55 @@ const confirm = asyncErrorHandler(async (req, res) => {
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
 
     const emailContext = {
       name: payment.name,
       email: guestDetails.email,
       id: payment.ref,
       bookingType:
-        (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
-          ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
-          : "Day Pass",
+        roomDetails?.selectedRooms?.map((room) => room.title).join(', ') ||
+        'Day Pass',
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}`
-        : `${formatDate(roomDetails?.startDate)}`,
+        ? formatDate(roomDetails?.visitDate)
+        : roomDetails?.startDate
+        ? formatDate(roomDetails?.startDate)
+        : roomDetails?.startDate,
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}`
-        : `${formatDate(roomDetails?.startDate)}`,
+        ? formatDate(roomDetails?.endDate)
+        : roomDetails?.startDate
+        ? formatDate(roomDetails?.startDate)
+        : roomDetails?.startDate,
       numberOfGuests: roomDetails?.visitDate
-        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-        } Infants`
+        ? `${
+            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+          } Adults, ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+          } Children ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+          } Toddlers ${
+            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+          } Infants`
         : bookingInfo
-          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
+        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+        : `${roomDetails?.adultsCount ?? 0} Adults, ${
+            roomDetails?.childrenCount ?? 0
           } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
-        : "Day Pass",
+        : 'Day Pass',
       extras:
         roomDetails?.visitDate && roomDetails?.finalData
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
           : roomDetails?.startDate && roomDetails?.extras
-            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-            : "No Extras",
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+          : 'No Extras',
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
       clubMemberDiscount: payment.voucher,
@@ -404,171 +560,228 @@ const confirm = asyncErrorHandler(async (req, res) => {
       vat: formatPrice(payment.vat),
       totalCost: formatPrice(payment.totalCost),
       roomsPrice: payment.roomsPrice
-        ? payment.roomsPrice == "Daypass"
+        ? payment.roomsPrice == 'Daypass'
           ? payment.roomsPrice
           : formatPrice(payment.roomsPrice)
-        : "",
-      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
+        : '',
+      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : '',
       roomsDiscount: payment.roomsDiscount
-        ? payment.roomsDiscount == "Daypass"
+        ? payment.roomsDiscount == 'Daypass'
           ? payment.roomsDiscount
           : formatPrice(payment.roomsDiscount)
-        : "",
+        : '',
       discountApplied: payment.discountApplied
-        ? payment.discountApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
+        ? payment.discountApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : '',
       voucherApplied: payment.voucherApplied
-        ? payment.voucherApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
+        ? payment.voucherApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : '',
       priceAfterVoucher: payment.priceAfterVoucher
         ? formatPrice(payment.priceAfterVoucher)
-        : "",
+        : '',
       priceAfterDiscount: payment.priceAfterDiscount
         ? formatPrice(payment.priceAfterDiscount)
-        : "",
+        : '',
       totalGuests: totalGuests,
     };
     sendEmail(
       guestDetails.email,
-      "Your Booking Is Confirmed",
-      "confirmation",
+      'Your Booking Is Confirmed',
+      'confirmation',
       emailContext
     );
     sendEmail(
-      "bookings@jarabeachresort.com",
-      "New Booking Confirmed",
-      "confirmation",
+      'bookings@jarabeachresort.com',
+      'New Booking Confirmed',
+      'confirmation',
       emailContext
     );
   } else {
-    throw new ErrorResponse("Payment Not Found", 404);
+    throw new ErrorResponse('Payment Not Found', 404);
   }
 });
 
 const cancel = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
-  const payment = await paymentModel.findOne({ ref });
-  if (payment) {
-    const roomDetails = JSON.parse(payment.roomDetails);
-    if (roomDetails.selectedRooms) {
-      for (const room of roomDetails.selectedRooms) {
-        await SubRooms.findByIdAndUpdate(room.id, {
-          // $inc: { totalRoom: room.quantity },
-          totalRoom: 1,
-        });
-      }
+  // Find all payments with this ref
+  const payments = await paymentModel.find({ ref });
+  if (payments && payments.length > 0) {
+    for (const payment of payments) {
+      payment.status = 'Cancelled';
+      await payment.save();
     }
-    payment.status = "Cancelled";
-    await payment.save();
-    res.status(statusCode.accepted).json(payment);
-    const guestDetails = JSON.parse(payment.guestDetails);
-    const bookingInfo = payment.bookingInfo
-      ? JSON.parse(payment.bookingInfo)
+    res
+      .status(statusCode.accepted)
+      .json({
+        message: 'All payments with this ref have been cancelled',
+        count: payments.length,
+      });
+    // Use the last payment for email context
+    const lastPayment = payments[payments.length - 1];
+    const guestDetails = JSON.parse(lastPayment.guestDetails);
+    const roomDetails = JSON.parse(lastPayment.roomDetails);
+    const bookingInfo = lastPayment.bookingInfo
+      ? JSON.parse(lastPayment.bookingInfo)
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
+        bookingInfo?.adultsNonAlcoholic +
+        bookingInfo?.Nanny +
+        bookingInfo?.childTotal;
 
+    // Add VAT/subtotal fallback logic as in squad.service.js
+    if (
+      (!lastPayment.vat || isNaN(parseFloat(lastPayment.vat))) &&
+      lastPayment.totalCost &&
+      !isNaN(parseFloat(lastPayment.totalCost))
+    ) {
+      const calculatedSubTotal = lastPayment.totalCost / 1.125;
+      lastPayment.vat = lastPayment.totalCost - calculatedSubTotal;
+      if (!lastPayment.subTotal || isNaN(parseFloat(lastPayment.subTotal))) {
+        lastPayment.subTotal = calculatedSubTotal;
+      }
+    }
+    // Accept both numbers and numeric strings
+    function isValidNumber(val) {
+      return !isNaN(parseFloat(val)) && isFinite(val);
+    }
     const emailContext = {
-      name: payment.name,
-      email: guestDetails.email,
-      id: payment.ref,
+      name: lastPayment.name || 'N/A',
+      email: guestDetails.email || 'N/A',
+      id: lastPayment.ref || 'N/A',
       bookingType:
         roomDetails?.selectedRooms?.map((room) => ` ${room.title}`) ||
-        "Day Pass",
+        'Day Pass',
       checkIn: roomDetails?.visitDate
-        ? `${formatDate(roomDetails?.visitDate)}`
-        : `${formatDate(roomDetails?.startDate)}`,
+        ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
+        : roomDetails?.startDate
+        ? `${roomDetails?.startDate}, (12noon)`
+        : 'N/A',
       checkOut: roomDetails?.endDate
-        ? `${formatDate(roomDetails?.endDate)}`
-        : `${formatDate(roomDetails?.startDate)}`,
-      numberOfGuests: roomDetails?.visitDate
-        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-        } Infants`
-        : bookingInfo
-          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
-          } Children`,
+        ? `${formatDate(roomDetails?.endDate)}, (11am)`
+        : roomDetails?.startDate
+        ? `${roomDetails?.startDate}, (6pm)`
+        : 'N/A',
+      numberOfGuests:
+        roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
+          ? `${
+              roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+            } Adults, ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
+              0
+            } Children, ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
+              0
+            } Toddlers, ${
+              counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+            } Infants`
+          : bookingInfo
+          ? `${bookingInfo?.adultsAlcoholic ?? 0} Adults Alcoholic, ${
+              bookingInfo?.adultsNonAlcoholic ?? 0
+            } Adults Non Alcoholic, ${bookingInfo?.Nanny ?? 0} Nanny, ${
+              bookingInfo?.childTotal ?? 0
+            } Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${
+              roomDetails?.childrenCount ?? 0
+            } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
-        : "Day Pass",
+        : 'Day Pass',
       extras:
-        roomDetails?.visitDate && roomDetails?.finalData
-          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
-          : roomDetails?.startDate && roomDetails?.extras
-            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-            : "No Extras",
-      subTotal: formatPrice(payment.subTotal),
-      multiNightDiscount: payment.discount.toLocaleString(),
-      clubMemberDiscount: payment.voucher,
-      multiNightDiscountAvailable: payment.multiNightDiscount
-        ? payment.multiNightDiscount
-        : 0,
-      vat: formatPrice(payment.vat),
-      totalCost: formatPrice(payment.totalCost),
-      roomsPrice: payment.roomsPrice
-        ? payment.roomsPrice == "Daypass"
-          ? payment.roomsPrice
-          : formatPrice(payment.roomsPrice)
-        : "",
-      extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
-      roomsDiscount: payment.roomsDiscount
-        ? payment.roomsDiscount == "Daypass"
-          ? payment.roomsDiscount
-          : formatPrice(payment.roomsDiscount)
-        : "",
-      discountApplied: payment.discountApplied
-        ? payment.discountApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      voucherApplied: payment.voucherApplied
-        ? payment.voucherApplied == "true"
-          ? "Yes"
-          : "No"
-        : "",
-      priceAfterVoucher: payment.priceAfterVoucher
-        ? formatPrice(payment.priceAfterVoucher)
-        : "",
-      priceAfterDiscount: payment.priceAfterDiscount
-        ? formatPrice(payment.priceAfterDiscount)
-        : "",
-      totalGuests: totalGuests,
+        roomDetails?.visitDate &&
+        roomDetails?.finalData &&
+        roomDetails?.finalData.length > 0
+          ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`).join(', ')
+          : roomDetails?.startDate &&
+            roomDetails?.extras &&
+            roomDetails?.extras.length > 0
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`).join(', ')
+          : 'No Extras',
+      subTotal: isValidNumber(lastPayment.subTotal)
+        ? formatPrice(lastPayment.subTotal)
+        : 'N/A',
+      multiNightDiscount: isValidNumber(lastPayment.discount)
+        ? formatPrice(lastPayment.discount)
+        : 'N/A',
+      clubMemberDiscount: isValidNumber(lastPayment.voucher)
+        ? formatPrice(lastPayment.voucher)
+        : 'N/A',
+      multiNightDiscountAvailable: isValidNumber(lastPayment.multiNightDiscount)
+        ? formatPrice(lastPayment.multiNightDiscount)
+        : 'N/A',
+      vat: isValidNumber(lastPayment.vat)
+        ? formatPrice(lastPayment.vat)
+        : 'N/A',
+      totalCost: isValidNumber(lastPayment.totalCost)
+        ? formatPrice(lastPayment.totalCost)
+        : 'N/A',
+      roomsPrice: lastPayment.roomsPrice
+        ? lastPayment.roomsPrice == 'Daypass'
+          ? lastPayment.roomsPrice
+          : formatPrice(lastPayment.roomsPrice)
+        : 'N/A',
+      extrasPrice: isValidNumber(lastPayment.extrasPrice)
+        ? formatPrice(lastPayment.extrasPrice)
+        : 'N/A',
+      roomsDiscount: isValidNumber(lastPayment.roomsDiscount)
+        ? formatPrice(lastPayment.roomsDiscount)
+        : 'N/A',
+      discountApplied: lastPayment.discountApplied
+        ? lastPayment.discountApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : 'N/A',
+      voucherApplied: lastPayment.voucherApplied
+        ? lastPayment.voucherApplied == 'true'
+          ? 'Yes'
+          : 'No'
+        : 'N/A',
+      priceAfterVoucher: isValidNumber(lastPayment.priceAfterVoucher)
+        ? formatPrice(lastPayment.priceAfterVoucher)
+        : isValidNumber(lastPayment.totalCost)
+        ? formatPrice(lastPayment.totalCost)
+        : 'N/A',
+      priceAfterDiscount: isValidNumber(lastPayment.priceAfterDiscount)
+        ? formatPrice(lastPayment.priceAfterDiscount)
+        : isValidNumber(lastPayment.totalCost)
+        ? formatPrice(lastPayment.totalCost)
+        : 'N/A',
+      totalGuests: isValidNumber(totalGuests) ? totalGuests : 'N/A',
     };
-    sendEmail(
+    console.log(
+      'Attempting to send cancellation email to:',
+      guestDetails.email
+    );
+    console.log('Email context:', emailContext);
+    await sendEmail(
       guestDetails.email,
-      "Your Booking Has Been Cancelled",
-      "cancellation",
+      'Your Booking Has Been Cancelled',
+      'cancellation',
       emailContext
     );
     sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Cancelled",
-      "cancellation",
+      'bookings@jarabeachresort.com',
+      'Booking Cancelled',
+      'cancellation',
       emailContext
     );
   } else {
-    throw new ErrorResponse("Booking Not Found", 404);
+    throw new ErrorResponse('Booking Not Found', 404);
   }
 });
 const updatePayment = asyncErrorHandler(async (req, res) => {
   const { ref } = req.params;
   const payment = await paymentModel.findOne({ ref });
   if (!payment) {
-    throw new ErrorResponse("Payment not found", 404);
+    throw new ErrorResponse('Payment not found', 404);
   }
 
   Object.assign(payment, req.body);
@@ -583,22 +796,22 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     : null;
   const totalGuests = roomDetails?.visitDate
     ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-    counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-    counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-    counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
     : bookingInfo?.adultsAlcoholic +
-    bookingInfo?.adultsNonAlcoholic +
-    bookingInfo?.Nanny +
-    bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
   const emailContext = {
     name: payment.name,
     email: guestDetails.email,
     id: payment.ref,
     bookingType:
-      (roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0)
-        ? roomDetails.selectedRooms.map((room) => room.title).join(", ")
-        : "Day Pass",
+      roomDetails?.selectedRooms && roomDetails?.selectedRooms.length > 0
+        ? roomDetails.selectedRooms.map((room) => room.title).join(', ')
+        : 'Day Pass',
     checkIn: roomDetails?.visitDate
       ? `${formatDate(roomDetails?.visitDate)}`
       : `${formatDate(roomDetails?.startDate)}`,
@@ -606,23 +819,27 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       ? `${formatDate(roomDetails?.endDate)}`
       : `${formatDate(roomDetails?.startDate)}`,
     numberOfGuests: roomDetails?.visitDate
-      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-      } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-      } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-      } Infants`
+      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+        } Children ${
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+        } Toddlers ${
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+        } Infants`
       : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
+      ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+      : `${roomDetails?.adultsCount ?? 0} Adults, ${
+          roomDetails?.childrenCount ?? 0
         } Children`,
     numberOfNights: roomDetails?.visitDate
       ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
-      : "Day Pass",
+      : 'Day Pass',
     extras:
       roomDetails?.visitDate && roomDetails?.finalData
         ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
         : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : "No Extras",
+        ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+        : 'No Extras',
     subTotal: formatPrice(payment.subTotal),
     multiNightDiscount: payment.discount.toLocaleString(),
     clubMemberDiscount: payment.voucher,
@@ -633,66 +850,66 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     totalCost: formatPrice(payment.totalCost),
     previousCost: payment.previousCost.toLocaleString(),
     differenceToPay:
-      payment.previousPaymentStatus == "Pending"
+      payment.previousPaymentStatus == 'Pending'
         ? formatPrice(payment.totalCost)
         : parseFloat(payment.totalCost) - parseFloat(payment.previousCost) > 0
-          ? (
+        ? (
             parseFloat(payment.totalCost) - parseFloat(payment.previousCost)
           ).toLocaleString()
-          : 0,
+        : 0,
     roomsPrice: payment.roomsPrice
-      ? payment.roomsPrice == "Daypass"
+      ? payment.roomsPrice == 'Daypass'
         ? payment.roomsPrice
         : formatPrice(payment.roomsPrice)
-      : "",
-    extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : "",
+      : '',
+    extrasPrice: payment.extrasPrice ? formatPrice(payment.extrasPrice) : '',
     roomsDiscount: payment.roomsDiscount
-      ? payment.roomsDiscount == "Daypass"
+      ? payment.roomsDiscount == 'Daypass'
         ? payment.roomsDiscount
         : formatPrice(payment.roomsDiscount)
-      : "",
+      : '',
     discountApplied: payment.discountApplied
-      ? payment.discountApplied == "true"
-        ? "Yes"
-        : "No"
-      : "",
+      ? payment.discountApplied == 'true'
+        ? 'Yes'
+        : 'No'
+      : '',
     voucherApplied: payment.voucherApplied
-      ? payment.voucherApplied == "true"
-        ? "Yes"
-        : "No"
-      : "",
+      ? payment.voucherApplied == 'true'
+        ? 'Yes'
+        : 'No'
+      : '',
     priceAfterVoucher: payment.priceAfterVoucher
       ? formatPrice(payment.priceAfterVoucher)
-      : "",
+      : '',
     priceAfterDiscount: payment.priceAfterDiscount
       ? formatPrice(payment.priceAfterDiscount)
-      : "",
+      : '',
     totalGuests: totalGuests,
   };
-  if (req.body.status === "Pending") {
+  if (req.body.status === 'Pending') {
     sendEmail(
       guestDetails.email,
-      "Your Booking Is Updated",
-      "manage_pending",
+      'Your Booking Is Updated',
+      'manage_pending',
       emailContext
     );
     sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Updated",
-      "manage_pending",
+      'bookings@jarabeachresort.com',
+      'Booking Updated',
+      'manage_pending',
       emailContext
     );
-  } else if (req.body.status === "Success") {
+  } else if (req.body.status === 'Success') {
     sendEmail(
       guestDetails.email,
-      "Your Booking Is Updated",
-      "manage_success",
+      'Your Booking Is Updated',
+      'manage_success',
       emailContext
     );
     sendEmail(
-      "bookings@jarabeachresort.com",
-      "Booking Updated",
-      "manage_success",
+      'bookings@jarabeachresort.com',
+      'Booking Updated',
+      'manage_success',
       emailContext
     );
   }

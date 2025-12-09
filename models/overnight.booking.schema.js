@@ -3,7 +3,11 @@ const mongoose = require("mongoose");
 const overNightBookingSchema = mongoose.Schema(
   {
     totalGuest: { type: Object, required: true },
-    bookingDetails: { type: Object, required: true },
+    bookingDetails: {
+      type: Object,
+      required: true,
+      // Structure: { visitDate, endDate, roomAssignments: [{roomId, date, roomDetails}], selectedRooms, multiNightSelections }
+    },
     guestDetails: { type: Object, required: true },
     shortId: {
       type: String,
