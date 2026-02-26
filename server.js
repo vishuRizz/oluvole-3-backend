@@ -37,7 +37,7 @@ app.get('/health', function (req, res) {
   return res.send('Server Operation Success');
 });
 
-app.use('/new/api/v1', allRoutes); // ALL API END POINTS
+app.use('/api/v1', allRoutes); // ALL API END POINTS
 
 app.get('/test-error', (req, res) => {
   try {
