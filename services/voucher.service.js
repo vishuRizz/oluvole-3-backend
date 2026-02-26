@@ -4,6 +4,7 @@ const {
   ErrorResponse,
   asyncErrorHandler,
 } = require("../middlewares/error/error");
+const { paginate } = require("../utils/paginate");
 
 const createVoucher = asyncErrorHandler(async (req, res) => {
   let staffInfo = await voucherModel.create(req.body);
@@ -20,6 +21,12 @@ const getAll = asyncErrorHandler(async (req, res) => {
   } else {
     res.status(200).json(voucher);
   }
+});
+
+const getPaginatedVouchers = asyncErrorHandler(async (req, res) => {
+  const { page, limit } = req.query;
+  const result = await paginate(voucherModel, {}, { page, limit });
+  res.status(200).json(result);
 });
 
 const deleteVoucher = asyncErrorHandler(async (req, res) => {
@@ -61,4 +68,4 @@ const validateVoucher = asyncErrorHandler(async (req, res) => {
   }
 });
 
-module.exports = { createVoucher, getAll, deleteVoucher, validateVoucher };
+module.exports = { createVoucher, getAll, getPaginatedVouchers, deleteVoucher, validateVoucher };

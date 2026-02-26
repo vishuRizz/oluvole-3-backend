@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Booking Confirmation</title>
+    <style type="text/css">
+      @media only screen and (max-width: 620px) {
+        .footer {
+          padding: 12px !important;
+        }
+        .footer-address {
+          font-size: 13px !important;
+          line-height: 1.5 !important;
+        }
+        .footer-links {
+          font-size: 13px !important;
+          line-height: 1.7 !important;
+        }
+        .footer-links a {
+          display: inline-block !important;
+          margin: 2px 6px 2px 0 !important;
+          word-break: break-word !important;
+        }
+      }
+    </style>
   </head>
   <body
     style="
@@ -37,7 +57,7 @@
         <tr>
           <td style="width: 120px; padding: 5px">
             <img
-              src="https://booking.jarabeachresort.com/new/uploads/jarabeachlogo.png"
+              src="{{baseUrl}}/uploads/jarabeachlogo.png"
               alt="Jara Beach Resort Logo"
               style="width: 120px; height: auto"
             />
@@ -50,7 +70,7 @@
         </tr>
       </table>
       <img
-        src="https://booking.jarabeachresort.com/new/uploads/banner.png"
+        src="{{baseUrl}}/uploads/banner-email.jpeg"
         alt=""
         class="hero-image"
         style="width: 100%; height: auto"
@@ -180,7 +200,7 @@
             </tr>
           </table>
         </div>
-        <p>
+        <p class="footer-address">
           To complete your reservation, kindly make the payment of
           ₦{{differenceToPay}} to:
         </p>
@@ -195,11 +215,11 @@
         <p>
           Thank you for booking with Jara Beach Resort. If you require any
           assistance please email
-          <a href="mailto:bookings@jarabeachresort.com"
-            >bookings@jarabeachresort.com</a
+          <a href="mailto:info@jarabeachresort.com"
+            >info@jarabeachresort.com</a
           >
-          or call +234 908 798 1605, +234 708 067 1160 (call centre) or Whatsapp
-          (text only) +234 916 191 4477 (text only).
+          or call +234 703 513 7057 (call centre) or Whatsapp
+          (text only) +234 703 513 7057 (text only).
         </p>
       </div>
       <table
@@ -212,7 +232,7 @@
         <tr style="vertical-align: top">
           <td width="33%" style="padding: 10px; vertical-align: top">
             <img
-              src="https://booking.jarabeachresort.com/new/uploads/email1.jpeg"
+              src="{{baseUrl}}/uploads/email1.jpeg"
               alt="Food"
               style="
                 width: 100%;
@@ -247,7 +267,7 @@
 
           <td width="33%" style="padding: 10px; vertical-align: top">
             <img
-              src="https://booking.jarabeachresort.com/new/uploads/email2.jpeg"
+              src="{{baseUrl}}/uploads/email2.jpeg"
               alt="Sunset"
               style="
                 width: 100%;
@@ -290,7 +310,7 @@
 
           <td width="33%" style="padding: 10px; vertical-align: top">
             <img
-              src="https://booking.jarabeachresort.com/new/uploads/teams.jpeg"
+              src="{{baseUrl}}/uploads/teams.jpeg"
               alt="Activities"
               style="
                 width: 100%;
@@ -334,11 +354,11 @@
           font-size: 16px;
         "
       >
-        <p>
+        <p class="footer-address">
           ADDRESS: Museyo Beach, Eleko, Lotu Street, Off Lekki Free Trade Zone
           Road, 105101
         </p>
-        <p style="font-size: 20px">
+        <p class="footer-links" style="font-size: 20px">
           <a
             href="https://www.google.com/maps/place/6%C2%B026'19.4%22N+3%C2%B051'50.6%22E/@6.4387213,3.8618541,17z/data=!3m1!4b1!4m5!3m4!1s0x0:0x0!8m2!3d6.4387213!4d3.8640428?hl=en"
             >Google Map</a
@@ -357,3 +377,10 @@
     </div>
   </body>
 </html>
+
+
+
+
+
+
+

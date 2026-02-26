@@ -1,6 +1,7 @@
 const { staffModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
 const { ErrorResponse, asyncErrorHandler } = require("../middlewares/error/error");
+const { paginate } = require("../utils/paginate");
 
 const createStaff = asyncErrorHandler(async (req, res) => {
     let staffInfo = await staffModel.create(req.body)
@@ -19,7 +20,7 @@ const getSingle = asyncErrorHandler(async (req, res) => {
     }
 })
 
-const getAll= asyncErrorHandler(async (req, res) => {
+const getAll = asyncErrorHandler(async (req, res) => {
     let staff = await staffModel.find({})
     if (!staff) {
         throw new ErrorResponse("No Stff", statusCode.notFound)
@@ -29,9 +30,14 @@ const getAll= asyncErrorHandler(async (req, res) => {
     }
 })
 
+const getPaginatedStaff = asyncErrorHandler(async (req, res) => {
+    const { page, limit } = req.query;
+    const result = await paginate(staffModel, {}, { page, limit });
+    res.status(200).json(result);
+});
 
 const updateStaff = asyncErrorHandler(async (req, res) => {
-    let staffInfo = await staffModel.findByIdAndUpdate(req.params.id,req.body)
+    let staffInfo = await staffModel.findByIdAndUpdate(req.params.id, req.body)
     res.status(200).json(staffInfo)
 })
 
@@ -45,8 +51,4 @@ const deleteStaff = asyncErrorHandler(async (req, res) => {
     }
 })
 
-
-
-
-
-module.exports = { createStaff, getSingle, updateStaff, deleteStaff,getAll }
+module.exports = { createStaff, getSingle, updateStaff, deleteStaff, getAll, getPaginatedStaff }

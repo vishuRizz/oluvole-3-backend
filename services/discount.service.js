@@ -1,6 +1,7 @@
 const { discountModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
-const {AdminLogEvent} = require("./adminLogs.service");
+const { AdminLogEvent } = require("./adminLogs.service");
+const { paginate } = require("../utils/paginate");
 
 const {
   ErrorResponse,
@@ -9,7 +10,7 @@ const {
 
 const createDiscount = asyncErrorHandler(async (req, res) => {
   let staffInfo = await discountModel.create(req.body);
-    AdminLogEvent(req.body.adminId,'None','Added New Discount','Success',"Successfully Added New Discount ("+staffInfo.code+") ",staffInfo._id)
+  AdminLogEvent(req.body.adminId, 'None', 'Added New Discount', 'Success', "Successfully Added New Discount (" + staffInfo.code + ") ", staffInfo._id)
   res.status(200).json(staffInfo);
 });
 
@@ -20,6 +21,12 @@ const getAll = asyncErrorHandler(async (req, res) => {
   } else {
     res.status(200).json(voucher);
   }
+});
+
+const getPaginatedDiscounts = asyncErrorHandler(async (req, res) => {
+  const { page, limit } = req.query;
+  const result = await paginate(discountModel, {}, { page, limit });
+  res.status(200).json(result);
 });
 
 const deleteDiscount = asyncErrorHandler(async (req, res) => {
@@ -43,4 +50,4 @@ const validateDiscount = asyncErrorHandler(async (req, res) => {
   }
 });
 
-module.exports = { createDiscount, getAll, deleteDiscount, validateDiscount };
+module.exports = { createDiscount, getAll, getPaginatedDiscounts, deleteDiscount, validateDiscount };

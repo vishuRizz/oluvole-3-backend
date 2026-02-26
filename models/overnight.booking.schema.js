@@ -13,6 +13,11 @@ const overNightBookingSchema = mongoose.Schema(
       type: String,
       unique: true, // Ensure uniqueness
     },
+    status: {
+      type: String,
+      enum: ["Pending", "Confirmed", "Checked In", "Checked Out", "Cancelled"],
+      default: "Pending",
+    },
   },
   { timestamps: true }
 );
@@ -25,6 +30,11 @@ const daypassBookingSchema = mongoose.Schema(
     shortId: {
       type: String,
       unique: true, // Ensure uniqueness
+    },
+    status: {
+      type: String,
+      enum: ["Pending", "Confirmed", "Checked In", "Checked Out", "Cancelled"],
+      default: "Pending",
     },
   },
   { timestamps: true }

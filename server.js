@@ -4,6 +4,7 @@ const path = require('path');
 const morgan = require('morgan');
 require('dotenv').config();
 const logger = require('./utils/logger');
+const { verifyMailer } = require('./config/mail.config');
 const connectDatabase = require('./connection/database');
 const { errorMiddleware, ErrorResponse } = require('./middlewares/error/error');
 const { statusCode } = require('./utils/statusCode');
@@ -59,6 +60,7 @@ app.use(errorMiddleware);
 
 const server = app.listen(port, () => {
   console.log(`server is running on PORT ${port}`);
+  verifyMailer();
 
   if (process.send) {
     process.send('ready');
@@ -108,6 +110,16 @@ const gracefulShutdown = (signal) => {
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Prevent server crash on unhandled errors (e.g., MongoDB connection loss in cron jobs)
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception (server will continue):', err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Promise Rejection (server will continue):', reason);
+});
 
 const del = async () => {
   // await RoomTypes.deleteMany()

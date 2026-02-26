@@ -1,475 +1,678 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Booking Confirmation</title>
-  </head>
-  <body
-    style="
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      margin: 0;
-      padding: 0;
-    "
-  >
-    <div
-      class="container"
-      style="
-        max-width: 600px;
-        margin: 0 auto;
-        background-color: #ffffff;
-        border: 1px solid #ccc;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      "
-    >
-      <!-- <div
-        class="header"
-        style="
-          background-color: rgb(0, 128, 0);
-          color: #fff;
-          padding: 5px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 40px;
-          text-align: right;
-          font-size: 12px;
-        "
-      >
-        <img
-          src="https://github.com/twentyFourDesign/JaraNewBuildBackend/blob/main/uploads/jarabeachlogo.png?raw=true"
-          alt="Jara Beach Resort Logo"
-          style="width: 120px; height: auto"
-        />
-        <h1 style="margin: 0; font-size: 18px">BOOKING CONFIRMED!</h1>
-      </div> -->
-      <table
-        style="
-          width: 100%;
-          background-color: rgb(0, 128, 0);
-          color: #fff;
-          text-align: right;
-          padding: 5px;
-          font-size: 12px;
-        "
-      >
-        <tr>
-          <td style="width: 120px; padding: 5px">
-            <img
-              src="https://booking.jarabeachresort.com/new/uploads/jarabeachlogo.png"
-              alt="Jara Beach Resort Logo"
-              style="width: 120px; height: auto; border: 0; outline: none;"
-              border="0"
-              role="presentation"
-            />
-          </td>
-          <td style="padding: 5px; text-align: right">
-            <h1 style="margin: 0; font-size: 18px">BOOKING CONFIRMED!</h1>
-          </td>
-        </tr>
-      </table>
-      <img
-        src="https://booking.jarabeachresort.com/new/uploads/banner.png"
-        alt="Jara Beach Resort Banner"
-        class="hero-image"
-        style="width: 100%; height: auto; border: 0; outline: none;"
-        border="0"
-        role="presentation"
-      />
-      <div class="content" style="padding: 20px">
-        <p>Dear {{name}} ({{email}})</p>
-        <p>
-          Many thanks, your payment has been received - your booking #{{id}} is
-          confirmed. We look forward to welcoming you to our little slice of
-          paradise!
-        </p>
-        <div
-          class="booking-details"
-          style="background-color: #f4f4f4; padding: 15px; margin-top: 20px"
-        >
-          <h2 style="color: #0000ff; margin-top: 0">BOOKING DETAILS</h2>
-          <table style="width: 100%">
-            <tr>
-              <td style="padding: 5px 0"><strong>Rooms:</strong></td>
-              <td style="padding: 5px 0">{{bookingType}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Check In:</strong></td>
-              <td style="padding: 5px 0">{{checkIn}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Check Out:</strong></td>
-              <td style="padding: 5px 0">{{checkOut}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Number of Guests:</strong></td>
-              <td style="padding: 5px 0">{{numberOfGuests}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Number of Nights:</strong></td>
-              <td style="padding: 5px 0">{{numberOfNights}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Extras:</strong></td>
-              <td style="padding: 5px 0">{{extras}}</td>
-            </tr>
 
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>Multi-night discount applied:</strong>
-              </td>
-              <td style="padding: 5px 0">₦{{multiNightDiscount}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>Voucher Balance:</strong>
-              </td>
-              <td style="padding: 5px 0">₦{{clubMemberDiscount}}</td>
-            </tr>
-            <tr>
-              <td>
-                <h2 style="color: #0000ff; margin: 0">Cost Breakdown</h2>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Rooms:</strong></td>
-              <td style="padding: 5px 0">{{roomsPrice}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Rooms Discount:</strong></td>
-              <td style="padding: 5px 0">{{roomsDiscount}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Extras:</strong></td>
-              <td style="padding: 5px 0">₦{{extrasPrice}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>Voucher Code Applied:</strong>
-              </td>
-              <td style="padding: 5px 0">{{voucherApplied}}</td>
-            </tr>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking Confirmed - Jara Beach Resort</title>
+  <style type="text/css">
+    @media only screen and (max-width: 620px) {
+      .footer-col {
+        display: block !important;
+        width: 100% !important;
+        padding: 14px 16px !important;
+      }
+      .footer-links-left,
+      .footer-links-right {
+        display: block !important;
+        width: 100% !important;
+        text-align: left !important;
+        padding: 6px 0 !important;
+      }
+      .footer-links-right a {
+        display: inline-block !important;
+        margin: 0 10px 0 0 !important;
+      }
+    }
+  </style>
+  <!--[if mso]>
+    <style type="text/css">
+      body, table, td { font-family: Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+</head>
 
+<body
+  style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f0f4f8;">
+  <!-- Main Container -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f0f4f8;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table width="600" cellpadding="0" cellspacing="0" border="0"
+          style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+
+          <!-- Hero Banner (logo embedded in image) -->
+          <tr>
+            <td style="position: relative;">
+              <img src="{{baseUrl}}/uploads/banner-email.jpeg" alt="Jara Beach Resort"
+                style="width: 100%; height: auto; display: block; border: 0; outline: none;" border="0" />
+            </td>
+          </tr>
+
+          <!-- Booking Confirmed Heading -->
+          <tr>
+            <td align="center" style="padding: 0 30px 10px 30px;">
+              <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #1a6b4a; letter-spacing: 0.5px;">Booking
+                Confirmed</h1>
+            </td>
+          </tr>
+
+          <!-- Booking Reference Box -->
+          <tr>
+            <td align="center" style="padding: 10px 30px 20px 30px;">
+              <table cellpadding="0" cellspacing="0" border="0"
+                style="border: 2px dashed #c5d6e0; border-radius: 10px; padding: 15px 30px; background-color: #f8fbfd; width: 80%;">
+                <tr>
+                  <td align="center">
+                    <p
+                      style="margin: 0 0 5px 0; font-size: 12px; color: #6b8a9e; text-transform: uppercase; letter-spacing: 1px;">
+                      Your Booking Reference</p>
+                    <p style="margin: 0; font-size: 24px; font-weight: 700; color: #1a3c50; letter-spacing: 2px;">{{id}}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding: 0 30px 10px 30px;">
+              <p style="margin: 0; font-size: 15px; color: #444;">Dear <strong>{{name}}</strong> <a
+                  href="mailto:{{email}}" style="color: #1a6b4a;">{{email}}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <p style="margin: 0; font-size: 15px; color: #444; line-height: 1.7;">
+                Many thanks, your payment has been received – your booking <strong>#{{id}}</strong> is now
+                <strong>CONFIRMED</strong>. We look forward to welcoming you to our little slice of paradise!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Booking Details Section -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="border: 1px solid #e0e8ef; border-radius: 10px; overflow: hidden;">
+                <!-- Section Header -->
+                <tr>
+                  <td colspan="2" style="background-color: #1a3c50; padding: 12px 20px;">
+                    <h2 style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 600; letter-spacing: 0.5px;">
+                      Booking Details</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6; width: 50%;">
+                    <strong>Rooms:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{bookingType}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Check-in:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{checkIn}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Check-out:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{checkOut}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Number of Guests:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{numberOfGuests}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Number of Nights:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{numberOfNights}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Extras:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{extras}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Multi-night discount applied:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{multiNightDiscount}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666;"><strong>Voucher Balance:</strong></td>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #333; text-align: right;">
+                    {{clubMemberDiscount}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Cost Breakdown Section -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="border: 1px solid #e0e8ef; border-radius: 10px; overflow: hidden;">
+                <tr>
+                  <td colspan="2" style="background-color: #1a3c50; padding: 12px 20px;">
+                    <h2 style="margin: 0; font-size: 16px; color: #ffffff; font-weight: 600; letter-spacing: 0.5px;">
+                      Cost Breakdown</h2>
+                  </td>
+                </tr>
+                <tr>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6; width: 50%;">
+                    <strong>Rooms:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    ₦{{roomsPrice}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Rooms Discount:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{roomsDiscount}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Extras:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    ₦{{extrasPrice}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Voucher Code Applied:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{voucherApplied}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Discount Code Applied:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{discountApplied}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Total Guests:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{totalGuests}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Sub Total:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{subTotal}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Price After Voucher:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{priceAfterVoucher}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>Price After Discount:</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{priceAfterDiscount}}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 20px; font-size: 14px; color: #666; border-bottom: 1px solid #f0f3f6;">
+                    <strong>VAT and Consumption Tax (12.5%):</strong></td>
+                  <td
+                    style="padding: 12px 20px; font-size: 14px; color: #333; border-bottom: 1px solid #f0f3f6; text-align: right;">
+                    {{vat}}</td>
+                </tr>
+                <!-- Total Cost Row (highlighted) -->
+                <tr>
+                  <td style="padding: 14px 20px; font-size: 15px; color: #1a3c50; background-color: #e8f5ef;">
+                    <strong>Total Cost (PAYABLE):</strong></td>
+                  <td
+                    style="padding: 14px 20px; font-size: 16px; color: #1a6b4a; background-color: #e8f5ef; text-align: right; font-weight: 700;">
+                    ₦{{totalCost}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Pre-Trip Info -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <p style="font-size: 14px; color: #555; line-height: 1.7; margin: 0;">
+                To ensure you're fully prepared ahead of your trip, kindly ensure you've read the following applicable
+                links:
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 0 30px 20px 30px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding: 0 8px;">
+                    <a href="https://www.jarabeachresort.com/welcome" target="_blank"
+                      style="color: #1a6b4a; font-size: 13px; font-weight: 600; text-decoration: none; text-transform: uppercase;">GENERAL
+                      FAQS</a>
+                  </td>
+                  <td style="color: #ccc; font-size: 13px;">|</td>
+                  <td style="padding: 0 8px;">
+                    <a href="https://menu.jarabeachresort.com/" target="_blank"
+                      style="color: #1a6b4a; font-size: 13px; font-weight: 600; text-decoration: none; text-transform: uppercase;">MENUS</a>
+                  </td>
+                  <td style="color: #ccc; font-size: 13px;">|</td>
+                  <td style="padding: 0 8px;">
+                    <a href="https://www.jarabeachresort.com/children" target="_blank"
+                      style="color: #1a6b4a; font-size: 13px; font-weight: 600; text-decoration: none; text-transform: uppercase;">VISITING
+                      WITH CHILDREN</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Directions Section -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background-color: #f8fbfd; border-radius: 10px; padding: 20px; border-left: 4px solid #1a6b4a;">
+                <tr>
+                  <td style="padding: 15px 20px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #1a3c50; font-weight: 700;">DIRECTIONS /
+                      ADDRESS</h3>
+                    <p style="font-size: 13px; color: #555; line-height: 1.7; margin: 0;">
+                      Beach Resort – Museyo Beach, Eleko, Lotu Street, Off Lekki Free Trade Zone Road, 105101. This
+                      <a href="https://www.google.com/maps/place/6%C2%B026'19.4%22N+3%C2%B051'50.6%22E/@6.4387213,3.8618541,17z/data=!3m1!4b1!4m5!3m4!1s0x0:0x0!8m2!3d6.4387213!4d3.8640428?hl=en"
+                        target="_blank" style="color: #1a6b4a; font-weight: 600;">Google Map link</a>
+                      will bring you to our door. Use
+                      <a href="https://www.jarabeachresort.com/photo-directions" target="_blank"
+                        style="color: #1a6b4a; font-weight: 600;">this link</a>
+                      once you've turned left at Eleko Beach Junction.
+                    </p>
+                    <p style="font-size: 13px; color: #555; line-height: 1.7; margin: 10px 0 0 0;">
+                      Please note, there is a toll gate kiosk at the beach turning owned and operated by the
+                      <a href="https://www.jarabeachresort.com/museyo-community-youth" target="_blank"
+                        style="color: #1a6b4a; font-weight: 600;">Museyo Youth Community</a>
+                      – access is just ₦1000 for a car or SUV, where cash is required.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Early Arrival Options Section -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background-color: #f8fbfd; border-radius: 10px; padding: 20px; border-left: 4px solid #2a7cb5;">
+                <tr>
+                  <td style="padding: 15px 20px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #1a3c50; font-weight: 700;">EARLY ARRIVAL
+                      OPTIONS</h3>
+                    <p style="font-size: 13px; color: #555; line-height: 1.7; margin: 0;">
+                      Subject to availability and management discretion. Jara provides a TIME and CONSUMPTION-based
+                      offering. Should you arrive prior to the earliest permitted entry time, or wish to extend your
+                      enjoyment, Jara has a range of options available to you. Please
+                      <a href="https://www.jarabeachresort.com/paidmenu" target="_blank"
+                        style="color: #1a6b4a; font-weight: 600;">click here</a>.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Last Hour Bookings Section -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background-color: #f8fbfd; border-radius: 10px; padding: 20px; border-left: 4px solid #d4a24e;">
+                <tr>
+                  <td style="padding: 15px 20px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #1a3c50; font-weight: 700;">LAST HOUR
+                      BOOKINGS</h3>
+                    <p style="font-size: 13px; color: #555; line-height: 1.7; margin: 0;">
+                      If you have chosen to visit Jara spontaneously, or perhaps a room became available last minute, it
+                      is very important you are completely familiar with all terms of your booking and expected house
+                      rules. Click
+                      <a href="https://www.jarabeachresort.com/lasthourbookings" target="_blank"
+                        style="color: #1a6b4a; font-weight: 600;">here</a>
+                      for more information.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Terms and Condition -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #1a3c50; font-weight: 700;">Terms and Condition</h3>
+              <p style="font-size: 13px; color: #555; line-height: 1.7; margin: 0;">
+                Please check <a href="https://www.jarabeachresort.com/terms" target="_blank"
+                  style="color: #1a6b4a; font-weight: 600;">this link</a> for our comprehensive Terms and Conditions.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Thank You Message -->
+          <tr>
+            <td style="padding: 10px 30px 5px 30px;">
+              <p style="font-size: 14px; color: #555; margin: 0;">Many thanks for choosing Jara and we look forward to
+                welcoming you!</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <p style="font-size: 14px; color: #333; margin: 0;">Best regards,</p>
+            </td>
+          </tr>
+
+          <!-- Jara Beach Resort Name -->
+          <tr>
+            <td style="padding: 0 30px 10px 30px;">
+              <h2 style="margin: 0; font-size: 20px; color: #1a6b4a;">Jara Beach Resort</h2>
+            </td>
+          </tr>
+
+          <!-- Important Points -->
+          <tr>
+            <td style="padding: 0 30px 20px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background-color: #fff8e6; border-radius: 10px; border: 1px solid #f0e0a0;">
+                <tr>
+                  <td style="padding: 15px 20px;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #8a6d1d;">➡️ Important points (please read):
+                    </h4>
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="padding: 4px 8px 4px 0; font-size: 13px; color: #6b5a23; vertical-align: top; font-style: italic;">
+                          1.</td>
+                        <td style="padding: 4px 0; font-size: 13px; color: #6b5a23; font-style: italic;">Jara Beach
+                          Resort is not responsible for bad weather conditions – "Some people feel the rain. Others just
+                          get wet" Bob Marley.</td>
+                      </tr>
+                      <tr>
+                        <td
+                          style="padding: 4px 8px 4px 0; font-size: 13px; color: #6b5a23; vertical-align: top; font-style: italic;">
+                          2.</td>
+                        <td style="padding: 4px 0; font-size: 13px; color: #6b5a23; font-style: italic;">Jara Beach
+                          Resort is also not responsible for traffic – sometimes there can be significant delays. Please
+                          ensure you leave enough time to arrive promptly, allowing you to fully enjoy your time.</td>
+                      </tr>
+                      <tr>
+                        <td
+                          style="padding: 4px 8px 4px 0; font-size: 13px; color: #6b5a23; vertical-align: top; font-style: italic;">
+                          3.</td>
+                        <td style="padding: 4px 0; font-size: 13px; color: #6b5a23; font-style: italic;">Please contact
+                          us via phone or email should you be arriving later than 1:30pm on your day of arrival – our
+                          lunch is served strictly between 1pm and 3pm.</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Digital Welcome Book -->
+          <tr>
+            <td style="padding: 0 30px 15px 30px;">
+              <p style="font-size: 13px; color: #555; font-style: italic; margin: 0;">
+                For more information, our digital 'in-room' welcome book can be found
+                <a href="http://jarabeachresort.com/welcome" target="_blank"
+                  style="color: #1a6b4a; font-weight: 600;">here</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Need Help Section -->
+          <tr>
+            <td style="padding: 0 30px 25px 30px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background-color: #f0f7f4; border-radius: 10px; border: 1px solid #d0e8db;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1a3c50;">Need Help or Have Questions?</h3>
+                    <p style="font-size: 13px; color: #555; margin: 0 0 5px 0;">We're always happy to help.</p>
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding: 3px 0; font-size: 13px; color: #555;">📧 Email: <a
+                            href="mailto:info@jarabeachresort.com"
+                            style="color: #1a6b4a;">info@jarabeachresort.com</a></td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 3px 0; font-size: 13px; color: #555;">📞 Phone / Call Centre: +234 703 513 7057</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 3px 0; font-size: 13px; color: #555;">💬 WhatsApp (text only): +234 703 513 7057</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Promotional Cards -->
+          <tr>
+            <td style="padding: 0 20px 20px 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <!-- Card 1 -->
+                  <td width="33%" style="padding: 5px; vertical-align: top;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                      style="border-radius: 10px; overflow: hidden; border: 1px solid #e8edf2;">
+                      <tr>
+                        <td>
+                          <img src="{{baseUrl}}/uploads/email1.jpeg"
+                            alt="Nigeria's Premier Award-Winning Beach Experience"
+                            style="width: 100%; height: 120px; object-fit: cover; display: block; border: 0;"
+                            border="0" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 12px 10px;">
+                          <h4 style="font-size: 12px; margin: 0 0 6px 0; color: #1a3c50; font-weight: 700;">NIGERIA'S
+                            PREMIER AWARD-WINNING</h4>
+                          <p style="font-size: 11px; color: #666; margin: 0 0 10px 0; line-height: 1.5;">Nigeria's
+                            Premier Award Winning, Family Run, All inclusive (food and drink) Beach Experience.</p>
+                          <a href="https://www.jarabeachresort.com/" target="_blank"
+                            style="display: inline-block; font-size: 11px; color: #1a6b4a; font-weight: 600; text-decoration: none;">Read
+                            More →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <!-- Card 2 -->
+                  <td width="33%" style="padding: 5px; vertical-align: top;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                      style="border-radius: 10px; overflow: hidden; border: 1px solid #e8edf2;">
+                      <tr>
+                        <td>
+                          <img src="{{baseUrl}}/uploads/email2.jpeg" alt="Exclusive and Serene Environment"
+                            style="width: 100%; height: 120px; object-fit: cover; display: block; border: 0;"
+                            border="0" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 12px 10px;">
+                          <h4 style="font-size: 12px; margin: 0 0 6px 0; color: #1a3c50; font-weight: 700;">EXCLUSIVE &
+                            SERENE ENVIRONMENT</h4>
+                          <p style="font-size: 11px; color: #666; margin: 0 0 10px 0; line-height: 1.5;">Open to
+                            Pre-Booked (paid) Visitors Only – No Walk-Ins. 20 Stunning En-Suite Rooms and Day Pass
+                            Visits.</p>
+                          <a href="https://www.jarabeachresort.com/" target="_blank"
+                            style="display: inline-block; font-size: 11px; color: #1a6b4a; font-weight: 600; text-decoration: none;">Read
+                            More →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <!-- Card 3 -->
+                  <td width="33%" style="padding: 5px; vertical-align: top;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                      style="border-radius: 10px; overflow: hidden; border: 1px solid #e8edf2;">
+                      <tr>
+                        <td>
+                          <img src="{{baseUrl}}/uploads/teams.jpeg" alt="Activities and Meals Inclusive"
+                            style="width: 100%; height: 120px; object-fit: cover; display: block; border: 0;"
+                            border="0" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 12px 10px;">
+                          <h4 style="font-size: 12px; margin: 0 0 6px 0; color: #1a3c50; font-weight: 700;">ACTIVITIES &
+                            MEALS INCLUSIVE</h4>
+                          <p style="font-size: 11px; color: #666; margin: 0 0 10px 0; line-height: 1.5;">Three full
+                            meals (and snacks) await our overnight guests; a fusion of international favourites.</p>
+                          <a href="https://www.jarabeachresort.com/" target="_blank"
+                            style="display: inline-block; font-size: 11px; color: #1a6b4a; font-weight: 600; text-decoration: none;">Read
+                            More →</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+<!-- Footer -->
+<tr>
+  <td style="background-color:#1f1f1f; padding:0;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <!-- Left Column -->
+        <td class="footer-col" width="50%" valign="top" style="padding:28px 24px;">
+          <h3 style="margin:0 0 10px 0; font-size:20px; color:#ffffff; font-weight:700;">
+            Jara Beach
+          </h3>
+          <p style="margin:0; font-size:14px; color:#cfcfcf; line-height:1.7;">
+            Welcome to our little slice of paradise, where indulgence meets serenity.
+            Located in the beautiful city of Lagos, Nigeria, our resort offers a unique
+            escape for day pass visitors and overnight guests.
+          </p>
+        </td>
+
+        <!-- Right Column -->
+        <td class="footer-col" width="50%" valign="top" style="padding:28px 24px;">
+          <h3 style="margin:0 0 10px 0; font-size:20px; color:#ffffff; font-weight:700;">
+            Contact
+          </h3>
+
+          <table cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td style="padding: 5px 0">
-                <strong>Discount Code Applied:</strong>
+              <td style="padding:4px 0; font-size:14px; color:#cfcfcf;">
+                📍 Museyo Beach, Eleko, Lotu Street, Off Lekki Free Trade Zone Road, 105101
               </td>
-              <td style="padding: 5px 0">{{discountApplied}}</td>
             </tr>
             <tr>
-              <td style="padding: 5px 0"><strong>Total Guests:</strong></td>
-              <td style="padding: 5px 0">{{totalGuests}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0"><strong>Sub Total:</strong></td>
-              <td style="padding: 5px 0">{{subTotal}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>Price After Voucher:</strong>
+              <td style="padding:4px 0; font-size:14px; color:#cfcfcf;">
+                📞 +234 703 513 7057
               </td>
-              <td style="padding: 5px 0">{{priceAfterVoucher}}</td>
             </tr>
             <tr>
-              <td style="padding: 5px 0">
-                <strong>Price After Discount:</strong>
+              <td style="padding:4px 0; font-size:14px;">
+                📧 <a href="mailto:info@jarabeachresort.com"
+                  style="color:#cfcfcf; text-decoration:none;">
+                  info@jarabeachresort.com
+                </a>
               </td>
-              <td style="padding: 5px 0">{{priceAfterDiscount}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>VAT and Consumption Tax (12.5%):</strong>
-              </td>
-              <td style="padding: 5px 0">{{vat}}</td>
-            </tr>
-            <tr>
-              <td style="padding: 5px 0">
-                <strong>Total Cost (PAYABLE):</strong>
-              </td>
-              <td style="padding: 5px 0">₦{{totalCost}}</td>
             </tr>
           </table>
-        </div>
-        <p>
-          To ensure you're fully prepared ahead of your trip, kindly ensure
-          you've read the following applicable links:
-        </p>
-        <p>
-          <a
-            href="https://www.jarabeachresort.com/welcome"
-            style="margin-right: 5px"
-          >
-            GENERAL FAQS
-          </a>
-          <span> | </span>
-          <a
-            href="https://menu.jarabeachresort.com/"
-            style="margin-right: 5px; margin-left: 5px"
-          >
-            MENUS
-          </a>
-          <span> | </span>
-          <a
-            href="https://www.jarabeachresort.com/children"
-            className="text-[#0F93F8] border-b-2 border-[#0F9EF8] sm:text-base text-sm"
-          >
-            VISITING WITH CHILDREN
-          </a>
-        </p>
-        <h2>DIRECTIONS / ADDRESS</h2>
-        <p>
-          Beach Resort - Museyo Beach, Eleko, Lotu Street Off Lekki Free Trade
-          Zone Road, 105101. This
-          <a
-            href="https://www.google.com/maps/place/6%C2%B026'19.4%22N+3%C2%B051'50.6%22E/@6.4387213,3.8618541,17z/data=!3m1!4b1!4m5!3m4!1s0x0:0x0!8m2!3d6.4387213!4d3.8640428?hl=en"
-            target="_blank"
-            >Google Map link</a
-          >
-          will bring you to our door. Use
-          <a
-            href="https://www.jarabeachresort.com/photo-directions"
-            target="_blank"
-            >this link</a
-          >
-          once you've turned left at Eleko Beach Junction.
-        </p>
-        <p>
-          Please note, there is a toll gate kiosk at the beach turning owned and
-          operated by the
-          <a
-            href="https://www.jarabeachresort.com/museyo-community-youth"
-            target="_blank"
-            >Museyo Youth Community</a
-          >
-          - access is just N1000 for a car or SUV, where cash is required.
-        </p>
-        <h2>EARLY ARRIVAL OPTIONS</h2>
-        <p>
-          Subject to availability and management discretion. Jara provides a
-          TIME and CONSUMPTION-based offering. Should you arrive prior to the
-          earliest permitted entry time, or wish to extend your enjoyment, Jara
-          has a range of options available to you. Please
-          <a
-            href="https://www.jarabeachresort.com/paidmenu"
-            target="_blank"
-            >click here</a
-          >.
-        </p>
-        <h2>LAST HOUR BOOKINGS</h2>
-        <p>
-          If you have chosen to visit Jara spontaneously, or perhaps a room
-          became available last minute, it is very important you are completely
-          familiar with all terms of your booking and expected house rules.
-          Click
-          <a
-            href="https://www.jarabeachresort.com/lasthourbookings"
-            target="_blank"
-            >here</a
-          >
-          for more information.
-        </p>
-        <h2>TERMS</h2>
-        <p>
-          Please check [<a
-            href="https://www.jarabeachresort.com/terms"
-            target="_blank"
-            >this link</a
-          >] for our comprehensive Terms and Conditions
-        </p>
-        <p>
-          Many thanks for choosing Jara and we look forward to welcoming you!
-        </p>
-        <p>Best regards,</p>
-        <h2>Jara Beach Resort</h2>
-        <h4>➡️ Important points (please read):</h4>
-        <ol type="1" style="font-style: italic">
-          <li>
-            Jara Beach Resort is not responsible for bad weather conditions -
-            “Some people feel the rain. Others just get wet” Bob Marley.
-          </li>
-          <li>
-            Jara Beach Resort is also not responsible for traffic - sometimes
-            there can be significant delays. Please ensure you leave enough time
-            to arrive promptly, allowing you to fully enjoy your time.
-          </li>
-          <li>
-            Please contact us via phone or email should you be arriving later
-            than 1:30pm on your day of arrival - our lunch is served strictly
-            between 1pm and 3pm.
-          </li>
-        </ol>
-        <p style="font-style: italic">
-          For more information, our digital ‘in-room’ welcome book can be found
-          <a
-            <!-- href="https://f48d99f5-ae16-48fc-bc52-11f193ac3e71.filesusr.com/ugd/310b2a_8eed223ecee04f22a67727de8eac3a29.pdf" -->
-            href="http://jarabeachresort.com/welcome"
-            target="_blank"
-            >here</a
-          >.
-        </p>
-        <p>
-          If you require any assistance please email
-          <a href="mailto:bookings@jarabeachresort.com"
-            >bookings@jarabeachresort.com</a
-          >
-          or call +234 908 798 1605, +234 708 067 1160 (call centre) or Whatsapp
-          (text only) +234 916 191 4477 (text only).
-        </p>
-      </div>
-      <table
-        width="100%"
-        cellpadding="0"
-        cellspacing="0"
-        border="0"
-        style="margin-top: 20px"
-      >
-        <tr style="vertical-align: top">
-          <td width="33%" style="padding: 10px; vertical-align: top">
-            <img
-              src="https://booking.jarabeachresort.com/new/uploads/email1.jpeg"
-              alt="🍽️ Food - Nigeria's Premier Award-Winning Beach Experience"
-              style="
-                width: 100%;
-                height: 150px;
-                object-fit: cover;
-                display: block;
-              "
-            />
-            <h3 style="font-size: 14px; margin: 10px 0; text-align: left">
-              NIGERIA'S PREMIER AWARD-WINNING
-            </h3>
-            <p style="font-size: 12px; margin-bottom: 10px; text-align: left">
-              Nigeria's Premier Award-Winning, Family Run, All-Inclusive (food
-              and drink) Beach Experience.
-            </p>
-            <a
-              href="https://www.jarabeachresort.com/"
-              style="
-                background-color: white;
-                color: #0000ff;
-                border: 1px solid #0000ff;
-                padding: 5px 10px;
-                text-decoration: none;
-                font-size: 12px;
-                text-align: center;
-                display: inline-block;
-                width: 90%;
-              "
-              >READ MORE</a
-            >
-          </td>
+        </td>
+      </tr>
 
-          <td width="33%" style="padding: 10px; vertical-align: top">
-            <img
-              src="https://booking.jarabeachresort.com/new/uploads/email2.jpeg"
-              alt="🌅 Sunset - Exclusive & Serene Environment"
-              style="
-                width: 100%;
-                height: 150px;
-                object-fit: cover;
-                display: block;
-              "
-            />
-            <h3 style="font-size: 14px; margin: 10px 0; text-align: left">
-              EXCLUSIVE & SERENE ENVIRONMENT
-            </h3>
-            <p style="font-size: 12px; margin-bottom: 10px; text-align: left">
-              Open to Pre-Booked (paid) Visitors Only - No Walk-Ins. 20 Stunning
-              En-Suite
-              <a href="https://booking.jarabeachresort.com/new/overnight/guest"
-                >Rooms</a
-              >
-              and
-              <a href="https://booking.jarabeachresort.com/new/daypass/guest"
-                >Day Pass</a
-              >
-              Visits.
-            </p>
-            <a
-              href="https://www.jarabeachresort.com/"
-              style="
-                background-color: white;
-                color: #0000ff;
-                border: 1px solid #0000ff;
-                padding: 5px 10px;
-                text-decoration: none;
-                font-size: 12px;
-                text-align: center;
-                display: inline-block;
-                width: 90%;
-              "
-              >READ MORE</a
-            >
-          </td>
+      <!-- Follow Us -->
+      <tr>
+        <td colspan="2" style="padding:10px 24px 20px 24px;">
+          <h4 style="margin:0 0 10px 0; font-size:16px; color:#ffffff; font-weight:600;">
+            Follow Us
+          </h4>
 
-          <td width="33%" style="padding: 10px; vertical-align: top">
-            <img
-              src="https://booking.jarabeachresort.com/new/uploads/teams.jpeg"
-              alt="🏃 Activities - Activities & Meals Inclusive"
-              style="
-                width: 100%;
-                height: 150px;
-                object-fit: cover;
-                display: block;
-              "
-            />
-            <h3 style="font-size: 14px; margin: 10px 0; text-align: left">
-              ACTIVITIES & MEALS INCLUSIVE
-            </h3>
-            <p style="font-size: 12px; margin-bottom: 10px; text-align: left">
-              Three full meals (and snacks) await our overnight guests; a fusion
-              of international favourites...
-            </p>
-            <a
-              href="https://www.jarabeachresort.com/"
-              style="
-                background-color: white;
-                color: #0000ff;
-                border: 1px solid #0000ff;
-                padding: 5px 10px;
-                text-decoration: none;
-                font-size: 12px;
-                text-align: center;
-                display: inline-block;
-                width: 90%;
-              "
-              >READ MORE</a
-            >
-          </td>
-        </tr>
-      </table>
-      <div
-        class="footer"
-        style="
-          background-color: rgb(0, 128, 0);
-          color: white;
-          padding: 10px;
-          text-align: center;
-          font-size: 16px;
-        "
-      >
-        <p>
-          ADDRESS: Museyo Beach, Eleko, Lotu Street, Off Lekki Free Trade Zone
-          Road, 105101
-        </p>
-        <p style="font-size: 20px">
-          <a
-            href="https://www.google.com/maps/place/6%C2%B026'19.4%22N+3%C2%B051'50.6%22E/@6.4387213,3.8618541,17z/data=!3m1!4b1!4m5!3m4!1s0x0:0x0!8m2!3d6.4387213!4d3.8640428?hl=en"
-            >Google Map</a
-          >
-          and
-          <a
-            href="https://www.google.com/maps/@6.4388409,3.8640606,3a,75y,173.14h,78.37t/data=!3m6!1e1!3m4!1sTKU4gHKBsT8Mi4MnOx0-MA!2e0!7i13312!8i6656"
-            >Street View</a
-          >
-          -
+          <table cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="padding-right:10px;">
+                <a href="https://instagram.com" target="_blank"
+                  style="display:inline-block; width:36px; height:36px; background-color:#2b2b2b;
+                  border-radius:50%; text-align:center; line-height:36px; color:#ffffff;
+                  font-size:18px; text-decoration:none;">
+                  📷
+                </a>
+              </td>
+              <td>
+                <a href="https://facebook.com" target="_blank"
+                  style="display:inline-block; width:36px; height:36px; background-color:#2b2b2b;
+                  border-radius:50%; text-align:center; line-height:36px; color:#ffffff;
+                  font-size:18px; text-decoration:none;">
+                  f
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Bottom Links -->
+      <tr>
+        <td colspan="2" style="padding:16px 24px; text-align:center; border-top:1px solid #333;">
+          <a href="https://www.google.com/maps/place/6%C2%B026'19.4%22N+3%C2%B051'50.6%22E"
+            target="_blank"
+            style="color:#ffffff; font-size:14px; text-decoration:underline; margin-right:20px;">
+            Google Maps
+          </a>
+
+          <a href="https://www.google.com/maps/@6.4388409,3.8640606,3a"
+            target="_blank"
+            style="color:#ffffff; font-size:14px; text-decoration:underline; margin-right:20px;">
+            Street View
+          </a>
+
           <a href="https://www.jarabeachresort.com/photo-directions"
-            >Photo Directions</a
-          >
-        </p>
-      </div>
-    </div>
-  </body>
+            target="_blank"
+            style="color:#ffffff; font-size:14px; text-decoration:underline;">
+            Photo Directions
+          </a>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
 </html>
+
+
+
+
+
+

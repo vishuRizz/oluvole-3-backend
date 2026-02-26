@@ -2,16 +2,17 @@ const Log = require('../models/adminLogs.schema');
 const { adminLogsModel } = require("../models");
 const { asyncErrorHandler, ErrorResponse } = require("../middlewares/error/error");
 const { statusCode } = require("../utils/statusCode");
+const { paginate } = require("../utils/paginate");
 
-module.exports.AdminLogEvent = async (adminId = '',userId = '',action='',status='',details='',targetId='') => {
+module.exports.AdminLogEvent = async (adminId = '', userId = '', action = '', status = '', details = '', targetId = '') => {
   try {
     const logData = {
-        adminId,
-        userId,
-        action,
-        status,
-        details,
-        targetId
+      adminId,
+      userId,
+      action,
+      status,
+      details,
+      targetId
     }
     const logEntry = new Log(logData);
     await logEntry.save();
@@ -23,7 +24,13 @@ module.exports.AdminLogEvent = async (adminId = '',userId = '',action='',status=
 
 module.exports.getAdminLogs = asyncErrorHandler(async (req, res) => {
   let allLogs = await adminLogsModel.find({}).sort({ createdAt: -1 });
-  if(allLogs.length>0) {res.status(statusCode.accepted).json(allLogs)}
-  else {throw new ErrorResponse("No Logs Found",404)}
+  if (allLogs.length > 0) { res.status(statusCode.accepted).json(allLogs) }
+  else { throw new ErrorResponse("No Logs Found", 404) }
+});
+
+module.exports.getPaginatedAdminLogs = asyncErrorHandler(async (req, res) => {
+  const { page, limit } = req.query;
+  const result = await paginate(adminLogsModel, {}, { page, limit });
+  res.status(statusCode.accepted).json(result);
 });
 // module.exports = AdminLogEvent

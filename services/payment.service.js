@@ -6,10 +6,14 @@ const logger = require('../utils/logger');
 const { paymentModel } = require('../models');
 const { loyaltyCoinModel } = require('../models/loyaltyPoints');
 const { statusCode } = require('../utils/statusCode');
+const { paginate } = require('../utils/paginate');
 const { sendEmail } = require('../config/mail.config');
 const { SubRooms } = require('../models/rooms.schema');
 const BookingLog = require('../models/bookingLog.schema.js');
+const { overnightBooking, daypassBooking } = require('../models/overnight.booking.schema');
 const BookingLogger = require('../services/bookingLogger.service');
+const Guest = require('../models/guest.schema');
+const { processGuestVisit } = require('../utils/guestManager');
 const {
   checkRoomAvailability,
   checkMultiNightAvailability,
@@ -24,16 +28,16 @@ function formatDate(dateString) {
     (v - 20) % 10 === 1
       ? 'st'
       : (v - 20) % 10 === 2
-      ? 'nd'
-      : (v - 20) % 10 === 3
-      ? 'rd'
-      : v === 1
-      ? 'st'
-      : v === 2
-      ? 'nd'
-      : v === 3
-      ? 'rd'
-      : 'th';
+        ? 'nd'
+        : (v - 20) % 10 === 3
+          ? 'rd'
+          : v === 1
+            ? 'st'
+            : v === 2
+              ? 'nd'
+              : v === 3
+                ? 'rd'
+                : 'th';
   const month = date.toLocaleString('en-US', { month: 'long' });
   const year = date.getFullYear();
   return `${day}${suffix},${month.toLowerCase()} ${year}`;
@@ -124,13 +128,13 @@ const create = asyncErrorHandler(async (req, res) => {
 
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
     // Create payment record
     createDaypass = await paymentModel.create(req.body);
@@ -157,7 +161,7 @@ const create = asyncErrorHandler(async (req, res) => {
         userAgent: req.get('User-Agent') || 'Unknown',
       });
       logger.info('Successful payment booking log created', {
-        bookingId: createDaypass._id,
+        bookingId: req.body.ref || createDaypass._id,
       });
     } catch (bookingLogError) {
       logger.error('Failed to create successful payment booking log', {
@@ -183,23 +187,20 @@ const create = asyncErrorHandler(async (req, res) => {
       throw new ErrorResponse('Payment successful but booking failed', 500);
     }
 
-    // Generate loyalty points (keep in try catch as before, but ensure it doesn't prevent response if it fails)
+    // Generate loyalty points and update guest record
     try {
       let amount = createDaypass.amount;
       let email = guestDetails.email;
 
-      if (createDaypass.status === 'Success') {
+      const currentStatusCheck = (createDaypass.status || '').toLowerCase();
+      if (['success', 'confirmed'].includes(currentStatusCheck)) {
+        // Loyalty logic
         let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
         if (loyaltyRecord) {
           loyaltyRecord.totalSpent += Number(amount);
           loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
           loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
           await loyaltyRecord.save();
-          logger.info('Loyalty points updated', {
-            email,
-            totalSpent: loyaltyRecord.totalSpent,
-            points: loyaltyRecord.points,
-          });
         } else {
           const points = Math.floor(amount / 10000);
           const newLoyalty = new loyaltyCoinModel({
@@ -209,16 +210,19 @@ const create = asyncErrorHandler(async (req, res) => {
             redeemable: points >= 50,
           });
           await newLoyalty.save();
-          logger.info('Loyalty record created', {
-            email,
-            totalSpent: amount,
-            points: newLoyalty.points,
-          });
         }
+
+        // Consolidated Guest processing
+        const isOvernight = !!(roomDetails?.visitDate || roomDetails?.selectedRooms);
+        const guestVisitData = {
+          ...guestDetails,
+          name: req.body.name || `${guestDetails.firstname || ''} ${guestDetails.lastname || ''}`.trim(),
+          email: guestDetails.email
+        };
+        await processGuestVisit(guestVisitData, isOvernight);
       }
-    } catch (loyaltyError) {
-      logger.error('Error while generating loyalty points:', loyaltyError);
-      // Continue execution even if loyalty points generation fails
+    } catch (err) {
+      logger.error('Error while processing loyalty/guest on payment create:', err);
     }
 
     // Send emails (keep in try catch as before)
@@ -232,27 +236,22 @@ const create = asyncErrorHandler(async (req, res) => {
       checkIn: roomDetails?.visitDate
         ? formatDate(roomDetails?.visitDate)
         : roomDetails?.startDate
-        ? formatDate(roomDetails?.startDate)
-        : roomDetails?.startDate,
+          ? formatDate(roomDetails?.startDate)
+          : roomDetails?.startDate,
       checkOut: roomDetails?.endDate
         ? formatDate(roomDetails?.endDate)
         : roomDetails?.startDate
-        ? formatDate(roomDetails?.startDate)
-        : roomDetails?.startDate,
+          ? formatDate(roomDetails?.startDate)
+          : roomDetails?.startDate,
       numberOfGuests: roomDetails?.visitDate
-        ? `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-          } Children ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-          } Toddlers ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-          } Infants`
+        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+        } Infants`
         : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${
-            roomDetails?.childrenCount ?? 0
+          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
           } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -261,8 +260,8 @@ const create = asyncErrorHandler(async (req, res) => {
         roomDetails?.visitDate && roomDetails?.finalData
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
           : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : 'No Extras',
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+            : 'No Extras',
       subTotal: formatPrice(req.body.subTotal),
       multiNightDiscount: req.body.discount.toLocaleString(),
       clubMemberDiscount: req.body.voucher,
@@ -300,29 +299,20 @@ const create = asyncErrorHandler(async (req, res) => {
     };
 
     try {
-      if (req.body.status === 'Pending') {
+      const currentStatus = (req.body.status || '').toLowerCase();
+      console.log(`[Payment] Processing email for status: ${req.body.status}`);
+
+      if (currentStatus === 'pending') {
         await sendEmail(
           guestDetails.email,
           'Your Booking Is Pending',
           'pending_payment',
           emailContext
         );
-        await sendEmail(
-          'bookings@jarabeachresort.com',
-          'New Booking Pending',
-          'pending_payment',
-          emailContext
-        );
-      } else if (req.body.status === 'Success') {
+      } else if (currentStatus === 'success' || currentStatus === 'confirmed') {
         await sendEmail(
           guestDetails.email,
           'Your Booking Is Confirmed',
-          'confirmation',
-          emailContext
-        );
-        await sendEmail(
-          'bookings@jarabeachresort.com',
-          'New Booking Confirmed',
           'confirmation',
           emailContext
         );
@@ -330,6 +320,53 @@ const create = asyncErrorHandler(async (req, res) => {
     } catch (emailError) {
       logger.error('Failed to send emails', { error: emailError.message });
       // Continue execution even if email sending fails
+    }
+
+    // Auto-create or update guest record so the admin Guests page stays in sync
+    try {
+      const guestName = createDaypass.name || `${guestDetails.firstname || ''} ${guestDetails.lastname || ''}`.trim();
+      const existingGuest = await Guest.findOne({ email: guestDetails.email });
+      if (existingGuest) {
+        // Determine if this is an overnight or daypass booking
+        const isOvernight = !!(roomDetails?.visitDate || roomDetails?.selectedRooms);
+        if (isOvernight) {
+          existingGuest.visitMetrics.overnightStays = (existingGuest.visitMetrics?.overnightStays || 0) + 1;
+        } else {
+          existingGuest.visitMetrics.dayVisits = (existingGuest.visitMetrics?.dayVisits || 0) + 1;
+        }
+        if (guestName) existingGuest.name = guestName;
+        if (guestDetails.phone || guestDetails.mobile) existingGuest.mobile = guestDetails.phone || guestDetails.mobile;
+        if (guestDetails.gender) existingGuest.gender = guestDetails.gender;
+        if (guestDetails.dateOfBirth) existingGuest.keyDates.dob = guestDetails.dateOfBirth;
+        await existingGuest.save();
+      } else {
+        const isOvernight = !!(roomDetails?.visitDate || roomDetails?.selectedRooms);
+        await Guest.create({
+          name: guestName || 'N/A',
+          gender: guestDetails.gender || 'N/A',
+          email: guestDetails.email,
+          mobile: guestDetails.phone || guestDetails.mobile || 'N/A',
+          member: false,
+          birthdayReminded: false,
+          visitMetrics: {
+            dayVisits: isOvernight ? 0 : 1,
+            overnightStays: isOvernight ? 1 : 0,
+          },
+          preferences: {
+            dietaryRequirements: guestDetails.para ? [guestDetails.para] : [],
+            drinkPreferences: guestDetails.drinkPreferences ? [guestDetails.drinkPreferences] : [],
+            pastExtras: [],
+          },
+          keyDates: {
+            dob: guestDetails.dateOfBirth || undefined,
+            anniversary: guestDetails.anniversary || undefined,
+          },
+        });
+      }
+      logger.info('Guest record auto-created/updated', { email: guestDetails.email });
+    } catch (guestErr) {
+      logger.error('Failed to auto-create guest record', { error: guestErr.message, email: guestDetails?.email });
+      // Don't fail the payment creation; this is a best-effort side effect
     }
 
     // Only send success response if booking log was created successfully
@@ -387,6 +424,12 @@ const getAll = asyncErrorHandler(async (req, res) => {
   } else {
     throw new ErrorResponse('No Payment Found', 404);
   }
+});
+
+const getPaginatedPayments = asyncErrorHandler(async (req, res) => {
+  const { page, limit } = req.query;
+  const result = await paginate(paymentModel, {}, { page, limit });
+  res.status(statusCode.accepted).json(result);
 });
 
 const getSingle = asyncErrorHandler(async (req, res) => {
@@ -462,10 +505,24 @@ const confirm = asyncErrorHandler(async (req, res) => {
     payment.method = `Bank Transfer ${bank}`;
     await payment.save();
 
+    // Also update corresponding overnight booking status if it exists
+    try {
+      await overnightBooking.findOneAndUpdate(
+        { shortId: ref },
+        { status: 'Confirmed' }
+      );
+      await daypassBooking.findOneAndUpdate(
+        { shortId: ref },
+        { status: 'Confirmed' }
+      );
+    } catch (err) {
+      logger.error('Failed to update overnight booking status on bank transfer confirm:', err);
+    }
+
     if (payment) {
       let amount = payment.amount;
-      const guestDetails = JSON.parse(payment.guestDetails);
-      let email = guestDetails.email;
+      const loyaltyGuestDetails = JSON.parse(payment.guestDetails);
+      let email = loyaltyGuestDetails.email;
       let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
       if (loyaltyRecord) {
         loyaltyRecord.totalSpent += Number(amount);
@@ -500,15 +557,30 @@ const confirm = asyncErrorHandler(async (req, res) => {
     const bookingInfo = payment.bookingInfo
       ? JSON.parse(payment.bookingInfo)
       : null;
+
+    // Auto-create or update guest record on bank transfer confirmation
+    try {
+      const isOvernight = !!(roomDetails?.visitDate || roomDetails?.selectedRooms);
+      const guestVisitData = {
+        ...guestDetails,
+        name: payment.name || `${guestDetails.firstname || ''} ${guestDetails.lastname || ''}`.trim(),
+        email: guestDetails.email
+      };
+      await processGuestVisit(guestVisitData, isOvernight);
+      logger.info('Guest record consolidated via guestManager on bank transfer confirmation', { email: guestDetails.email });
+    } catch (guestErr) {
+      logger.error('Failed to process guest record via guestManager on bank transfer confirmation', { error: guestErr.message, email: guestDetails?.email });
+    }
+
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
     const emailContext = {
       name: payment.name,
@@ -520,27 +592,22 @@ const confirm = asyncErrorHandler(async (req, res) => {
       checkIn: roomDetails?.visitDate
         ? formatDate(roomDetails?.visitDate)
         : roomDetails?.startDate
-        ? formatDate(roomDetails?.startDate)
-        : roomDetails?.startDate,
+          ? formatDate(roomDetails?.startDate)
+          : roomDetails?.startDate,
       checkOut: roomDetails?.endDate
         ? formatDate(roomDetails?.endDate)
         : roomDetails?.startDate
-        ? formatDate(roomDetails?.startDate)
-        : roomDetails?.startDate,
+          ? formatDate(roomDetails?.startDate)
+          : roomDetails?.startDate,
       numberOfGuests: roomDetails?.visitDate
-        ? `${
-            roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-          } Adults, ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-          } Children ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-          } Toddlers ${
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-          } Infants`
+        ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+        } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+        } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+        } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+        } Infants`
         : bookingInfo
-        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-        : `${roomDetails?.adultsCount ?? 0} Adults, ${
-            roomDetails?.childrenCount ?? 0
+          ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+          : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
           } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -549,8 +616,8 @@ const confirm = asyncErrorHandler(async (req, res) => {
         roomDetails?.visitDate && roomDetails?.finalData
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
           : roomDetails?.startDate && roomDetails?.extras
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-          : 'No Extras',
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+            : 'No Extras',
       subTotal: formatPrice(payment.subTotal),
       multiNightDiscount: payment.discount.toLocaleString(),
       clubMemberDiscount: payment.voucher,
@@ -594,12 +661,6 @@ const confirm = asyncErrorHandler(async (req, res) => {
       'confirmation',
       emailContext
     );
-    sendEmail(
-      'bookings@jarabeachresort.com',
-      'New Booking Confirmed',
-      'confirmation',
-      emailContext
-    );
   } else {
     throw new ErrorResponse('Payment Not Found', 404);
   }
@@ -629,13 +690,13 @@ const cancel = asyncErrorHandler(async (req, res) => {
       : null;
     const totalGuests = roomDetails?.visitDate
       ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-        counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
       : bookingInfo?.adultsAlcoholic +
-        bookingInfo?.adultsNonAlcoholic +
-        bookingInfo?.Nanny +
-        bookingInfo?.childTotal;
+      bookingInfo?.adultsNonAlcoholic +
+      bookingInfo?.Nanny +
+      bookingInfo?.childTotal;
 
     // Add VAT/subtotal fallback logic as in squad.service.js
     if (
@@ -663,48 +724,41 @@ const cancel = asyncErrorHandler(async (req, res) => {
       checkIn: roomDetails?.visitDate
         ? `${formatDate(roomDetails?.visitDate)}, (2pm)`
         : roomDetails?.startDate
-        ? `${roomDetails?.startDate}, (12noon)`
-        : 'N/A',
+          ? `${roomDetails?.startDate}, (12noon)`
+          : 'N/A',
       checkOut: roomDetails?.endDate
         ? `${formatDate(roomDetails?.endDate)}, (11am)`
         : roomDetails?.startDate
-        ? `${roomDetails?.startDate}, (6pm)`
-        : 'N/A',
+          ? `${roomDetails?.startDate}, (6pm)`
+          : 'N/A',
       numberOfGuests:
         roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
-          ? `${
-              roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-            } Adults, ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
-              0
-            } Children, ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
-              0
-            } Toddlers, ${
-              counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-            } Infants`
+          ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+          } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ??
+          0
+          } Children, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ??
+          0
+          } Toddlers, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+          } Infants`
           : bookingInfo
-          ? `${bookingInfo?.adultsAlcoholic ?? 0} Adults Alcoholic, ${
-              bookingInfo?.adultsNonAlcoholic ?? 0
-            } Adults Non Alcoholic, ${bookingInfo?.Nanny ?? 0} Nanny, ${
-              bookingInfo?.childTotal ?? 0
+            ? `${bookingInfo?.adultsAlcoholic ?? 0} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic ?? 0
+            } Adults Non Alcoholic, ${bookingInfo?.Nanny ?? 0} Nanny, ${bookingInfo?.childTotal ?? 0
             } Child`
-          : `${roomDetails?.adultsCount ?? 0} Adults, ${
-              roomDetails?.childrenCount ?? 0
+            : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
             } Children`,
       numberOfNights: roomDetails?.visitDate
         ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
         : 'Day Pass',
       extras:
         roomDetails?.visitDate &&
-        roomDetails?.finalData &&
-        roomDetails?.finalData.length > 0
+          roomDetails?.finalData &&
+          roomDetails?.finalData.length > 0
           ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`).join(', ')
           : roomDetails?.startDate &&
             roomDetails?.extras &&
             roomDetails?.extras.length > 0
-          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`).join(', ')
-          : 'No Extras',
+            ? roomDetails?.extras?.map((extra) => ` ${extra.title}`).join(', ')
+            : 'No Extras',
       subTotal: isValidNumber(lastPayment.subTotal)
         ? formatPrice(lastPayment.subTotal)
         : 'N/A',
@@ -747,13 +801,13 @@ const cancel = asyncErrorHandler(async (req, res) => {
       priceAfterVoucher: isValidNumber(lastPayment.priceAfterVoucher)
         ? formatPrice(lastPayment.priceAfterVoucher)
         : isValidNumber(lastPayment.totalCost)
-        ? formatPrice(lastPayment.totalCost)
-        : 'N/A',
+          ? formatPrice(lastPayment.totalCost)
+          : 'N/A',
       priceAfterDiscount: isValidNumber(lastPayment.priceAfterDiscount)
         ? formatPrice(lastPayment.priceAfterDiscount)
         : isValidNumber(lastPayment.totalCost)
-        ? formatPrice(lastPayment.totalCost)
-        : 'N/A',
+          ? formatPrice(lastPayment.totalCost)
+          : 'N/A',
       totalGuests: isValidNumber(totalGuests) ? totalGuests : 'N/A',
     };
     console.log(
@@ -784,10 +838,59 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     throw new ErrorResponse('Payment not found', 404);
   }
 
+  const previousStatus = payment.status;
   Object.assign(payment, req.body);
 
   await payment.save();
   res.status(200).json(payment);
+
+  // Auto-create or update guest record when status is changed to Success
+  if (req.body.status === 'Success' && previousStatus !== 'Success') {
+    try {
+      const roomDetailsForGuest = JSON.parse(payment.roomDetails);
+      const guestDetailsForGuest = JSON.parse(payment.guestDetails);
+      const guestName = payment.name || `${guestDetailsForGuest.firstname || ''} ${guestDetailsForGuest.lastname || ''}`.trim();
+      const existingGuest = await Guest.findOne({ email: guestDetailsForGuest.email });
+      const isOvernight = !!(roomDetailsForGuest?.visitDate || roomDetailsForGuest?.selectedRooms);
+      if (existingGuest) {
+        if (isOvernight) {
+          existingGuest.visitMetrics.overnightStays = (existingGuest.visitMetrics?.overnightStays || 0) + 1;
+        } else {
+          existingGuest.visitMetrics.dayVisits = (existingGuest.visitMetrics?.dayVisits || 0) + 1;
+        }
+        if (guestName) existingGuest.name = guestName;
+        if (guestDetailsForGuest.phone || guestDetailsForGuest.mobile) existingGuest.mobile = guestDetailsForGuest.phone || guestDetailsForGuest.mobile;
+        if (guestDetailsForGuest.gender) existingGuest.gender = guestDetailsForGuest.gender;
+        if (guestDetailsForGuest.dateOfBirth) existingGuest.keyDates.dob = guestDetailsForGuest.dateOfBirth;
+        await existingGuest.save();
+      } else {
+        await Guest.create({
+          name: guestName || 'N/A',
+          gender: guestDetailsForGuest.gender || 'N/A',
+          email: guestDetailsForGuest.email,
+          mobile: guestDetailsForGuest.phone || guestDetailsForGuest.mobile || 'N/A',
+          member: false,
+          birthdayReminded: false,
+          visitMetrics: {
+            dayVisits: isOvernight ? 0 : 1,
+            overnightStays: isOvernight ? 1 : 0,
+          },
+          preferences: {
+            dietaryRequirements: guestDetailsForGuest.para ? [guestDetailsForGuest.para] : [],
+            drinkPreferences: guestDetailsForGuest.drinkPreferences ? [guestDetailsForGuest.drinkPreferences] : [],
+            pastExtras: [],
+          },
+          keyDates: {
+            dob: guestDetailsForGuest.dateOfBirth || undefined,
+            anniversary: guestDetailsForGuest.anniversary || undefined,
+          },
+        });
+      }
+      logger.info('Guest record auto-created/updated on admin status change', { email: guestDetailsForGuest.email });
+    } catch (guestErr) {
+      logger.error('Failed to auto-create guest record on admin status change', { error: guestErr.message });
+    }
+  }
 
   const roomDetails = JSON.parse(payment.roomDetails);
   const guestDetails = JSON.parse(payment.guestDetails);
@@ -796,13 +899,13 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
     : null;
   const totalGuests = roomDetails?.visitDate
     ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-      counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+    counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
     : bookingInfo?.adultsAlcoholic +
-      bookingInfo?.adultsNonAlcoholic +
-      bookingInfo?.Nanny +
-      bookingInfo?.childTotal;
+    bookingInfo?.adultsNonAlcoholic +
+    bookingInfo?.Nanny +
+    bookingInfo?.childTotal;
 
   const emailContext = {
     name: payment.name,
@@ -819,17 +922,13 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       ? `${formatDate(roomDetails?.endDate)}`
       : `${formatDate(roomDetails?.startDate)}`,
     numberOfGuests: roomDetails?.visitDate
-      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
-        } Children ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
-        } Toddlers ${
-          counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
-        } Infants`
+      ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0} Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).children ?? 0
+      } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers ?? 0
+      } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ?? 0
+      } Infants`
       : bookingInfo
-      ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-      : `${roomDetails?.adultsCount ?? 0} Adults, ${
-          roomDetails?.childrenCount ?? 0
+        ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+        : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
         } Children`,
     numberOfNights: roomDetails?.visitDate
       ? calculateNumberOfNights(roomDetails?.visitDate, roomDetails?.endDate)
@@ -838,8 +937,8 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       roomDetails?.visitDate && roomDetails?.finalData
         ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
         : roomDetails?.startDate && roomDetails?.extras
-        ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-        : 'No Extras',
+          ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+          : 'No Extras',
     subTotal: formatPrice(payment.subTotal),
     multiNightDiscount: payment.discount.toLocaleString(),
     clubMemberDiscount: payment.voucher,
@@ -853,10 +952,10 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       payment.previousPaymentStatus == 'Pending'
         ? formatPrice(payment.totalCost)
         : parseFloat(payment.totalCost) - parseFloat(payment.previousCost) > 0
-        ? (
+          ? (
             parseFloat(payment.totalCost) - parseFloat(payment.previousCost)
           ).toLocaleString()
-        : 0,
+          : 0,
     roomsPrice: payment.roomsPrice
       ? payment.roomsPrice == 'Daypass'
         ? payment.roomsPrice
@@ -912,11 +1011,25 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
       'manage_success',
       emailContext
     );
+  } else if (req.body.status === 'Cancelled' || req.body.status === 'Cancelled by Admin') {
+    sendEmail(
+      guestDetails.email,
+      'Your Booking Has Been Cancelled',
+      'cancellation',
+      emailContext
+    );
+    sendEmail(
+      'bookings@jarabeachresort.com',
+      'Booking Cancelled',
+      'cancellation',
+      emailContext
+    );
   }
 });
 module.exports = {
   create,
   getAll,
+  getPaginatedPayments,
   getByBookingId,
   getSingle,
   confirm,

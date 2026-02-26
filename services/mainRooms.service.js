@@ -188,8 +188,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       Object.keys(bookingItem.bookingDetails.multiNightSelections).length > 0
     ) {
       console.log(
-        `📋 Booking ${bookingItem.shortId} using multiNightSelections (${
-          Object.keys(bookingItem.bookingDetails.multiNightSelections).length
+        `📋 Booking ${bookingItem.shortId} using multiNightSelections (${Object.keys(bookingItem.bookingDetails.multiNightSelections).length
         } nights)`
       );
       Object.entries(bookingItem.bookingDetails.multiNightSelections).forEach(
@@ -204,8 +203,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
               }
               roomOccupancyMap.get(roomId).add(dateString);
               console.log(
-                `  ✓ Marked room ${roomId} (${
-                  roomSelection.room?.title || 'N/A'
+                `  ✓ Marked room ${roomId} (${roomSelection.room?.title || 'N/A'
                 }) as occupied on ${dateString}`
               );
             });
@@ -236,8 +234,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
             const dateString = currentDate.toISOString().split('T')[0];
             roomOccupancyMap.get(roomId).add(dateString);
             console.log(
-              `  ✓ Marked room ${roomId} (${
-                selectedRoom.title || 'N/A'
+              `  ✓ Marked room ${roomId} (${selectedRoom.title || 'N/A'
               }) as occupied on ${dateString}`
             );
             currentDate.setDate(currentDate.getDate() + 1);
@@ -261,8 +258,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     const dateString = blockedDate.toISOString().split('T')[0];
     roomOccupancyMap.get(roomId).add(dateString);
     console.log(
-      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${
-        blockedRoom.description || 'N/A'
+      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'
       })`
     );
   }
@@ -410,6 +406,15 @@ const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
   res.status(200).json(expandedBookings);
 });
 
+const getRoomPaginated = asyncErrorHandler(async (req, res) => {
+  const { paginate } = require("../utils/paginate");
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  const result = await paginate(RoomTypes, {}, { page, limit });
+  res.status(200).json(result);
+});
+
 module.exports = {
   createRoom,
   getRoom,
@@ -421,4 +426,5 @@ module.exports = {
   getAllSubRoom,
   getAllSubRoom2,
   getBookingsForRoom,
+  getRoomPaginated,
 };

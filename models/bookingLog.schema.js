@@ -29,7 +29,11 @@ const BookingLogSchema = new mongoose.Schema({
     ipAddress: String,
     userAgent: String,
     retryAttempts: { type: Number, default: 0 },
-    resolved: { type: Boolean, default: false }
+    resolved: { type: Boolean, default: false },
+    checkedIn: { type: Boolean, default: false },
+    checkedInAt: { type: Date },
+    checkedOut: { type: Boolean, default: false },
+    checkedOutAt: { type: Date }
 });
 
 module.exports = mongoose.model('BookingLog', BookingLogSchema);

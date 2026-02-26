@@ -1,6 +1,7 @@
 const {
   create,
   getAll,
+  getPaginatedPayments,
   getSingle,
   confirm,
   cancel,
@@ -14,6 +15,7 @@ const router = require("express").Router();
 
 router.post("/create", create);
 router.get("/get", getAll);
+router.get("/get/paginated", getPaginatedPayments);
 router.get("/get/single/:id", getSingle);
 router.get("/get/byBookingId/:id", getByBookingId);
 router.post("/confirm/:ref", confirm);

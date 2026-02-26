@@ -13,6 +13,8 @@ const {
 // With dynamic import helper for nanoid
 const nanoid = async () => (await import('nanoid')).nanoid;
 const crypto = require('crypto');
+const Guest = require('../models/guest.schema');
+const { processGuestVisit } = require('../utils/guestManager');
 
 // Replace with your Squad secret key
 const SQUAD_SECRET = process.env.SQUAD_SECRET || 'YOUR_SQUAD_SECRET';
@@ -61,7 +63,7 @@ async function initiatePayment(data) {
       paymentStatus: 'failed',
       paymentGateway: 'Squad',
       paymentId: null,
-      amount: data.amount || 0,
+      amount: (data.amount || 0) / 100, // Convert kobo to naira for consistent logging
       currency: data.currency || 'N/A',
       errorDetails: {
         errorMessage:
@@ -105,7 +107,7 @@ async function initiatePayment(data) {
       paymentStatus: 'pending',
       paymentGateway: 'Squad',
       paymentId: response.data?.data?.transaction_ref || null,
-      amount: data.amount,
+      amount: data.amount / 100, // Convert kobo to naira for consistent logging
       currency: data.currency,
       bookingDetails: data,
       requestPayload: data,
@@ -123,7 +125,7 @@ async function initiatePayment(data) {
       paymentStatus: 'failed',
       paymentGateway: 'Squad',
       paymentId: null,
-      amount: data.amount,
+      amount: data.amount / 100, // Convert kobo to naira for consistent logging
       currency: data.currency,
       errorDetails: {
         errorMessage: error.message,
@@ -141,6 +143,10 @@ async function initiatePayment(data) {
 
 async function verifyTransaction(reference, bookingDetails = null) {
   console.log('=== SQUAD VERIFICATION START ===');
+  const toNumber = (val, fallback = 0) => {
+    const parsed = Number(val);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
 
   // Ensure these are always defined
   let guestDetails = {};
@@ -168,6 +174,22 @@ async function verifyTransaction(reference, bookingDetails = null) {
     else if (roomDetails.startDate) bookingType = 'daypass';
   }
 
+  // Idempotency guard: if this reference was already verified successfully, return early
+  // This prevents duplicate booking logs, duplicate emails, and duplicate DB entries
+  if (reference) {
+    const existingPayment = await Payment.findOne({ ref: reference, status: 'Success' });
+    if (existingPayment) {
+      console.log('✅ SQUAD: Payment already verified for reference:', reference, '- returning cached result');
+      return {
+        status: 'success',
+        message: 'Payment already verified',
+        data: { transaction_ref: reference, transaction_status: 'success' },
+        paymentRecord: existingPayment,
+        alreadyVerified: true,
+      };
+    }
+  }
+
   if (!reference) {
     await BookingLogger.logBookingAttempt({
       bookingId: reference || 'N/A',
@@ -188,14 +210,75 @@ async function verifyTransaction(reference, bookingDetails = null) {
   }
   try {
     const response = await squadApi.get(`/transaction/verify/${reference}`);
-    console.log('response', response);
-    // Always use naira for amount (divide by 100 if Squad returns kobo)
-    const transactionAmount = response.data?.data?.transaction_amount
-      ? Number(response.data.data.transaction_amount) / 100
+    const transactionData = response.data?.data;
+    const meta = transactionData?.meta || {};
+
+    // If bookingDetails not provided, try to reconstruct from metadata
+    if (!bookingDetails && Object.keys(meta).length > 0) {
+      console.log('📦 Reconstructing bookingDetails from Squad metadata');
+      let gDetails, rDetails, gCount, bInfo;
+
+      if (meta.availablity && meta.guestInfo) {
+        // Daypass / Retreat booking
+        gDetails = meta.guestInfo || {};
+        rDetails = meta.availablity || {};
+        bInfo = meta.bookingInfo || {};
+        gCount = {
+          adults: (bInfo.adultsAlcoholic || 0) + (bInfo.adultsNonAlcoholic || 0),
+          children: (bInfo.childTotal || 0) + (bInfo.Nanny || 0),
+        };
+      } else {
+        // Overnight booking
+        gDetails = meta.guestDetails || {};
+        rDetails = meta.roomDetails || {};
+        gCount = meta.guestCount || {};
+        bInfo = meta.bookingInfo || {};
+      }
+      const cBreakDown = meta.costBreakDown || {};
+
+      bookingDetails = {
+        name: gDetails.firstname ? `${gDetails.firstname} ${gDetails.lastname || ''}`.trim() : transactionData?.email || 'Unknown',
+        email: gDetails.email || transactionData?.email || 'unknown@unknown.com',
+        guestDetails: gDetails,
+        roomDetails: rDetails,
+        guestCount: gCount,
+        bookingInfo: bInfo,
+        subTotal: cBreakDown.RoomsPrice || cBreakDown.subTotal || '',
+        vat: cBreakDown.Vat || cBreakDown.vat || '',
+        totalCost: cBreakDown.TotalCost || cBreakDown.totalCost || (transactionData?.transaction_amount / 100) || '',
+        discount: toNumber(cBreakDown.Discount ?? cBreakDown.discount, 0),
+        voucher: toNumber(cBreakDown.Voucher ?? cBreakDown.voucher, 0),
+        multiNightDiscount: toNumber(cBreakDown.MultiNightDiscount ?? cBreakDown.multiNightDiscount, 0),
+        previousCost: toNumber(cBreakDown.PreviousCost ?? cBreakDown.previousCost, 0),
+        previousPaymentStatus: cBreakDown.PreviousPaymentStatus || cBreakDown.previousPaymentStatus || '',
+        roomsPrice: cBreakDown.RoomsPrice || cBreakDown.roomsPrice || '',
+        extrasPrice: cBreakDown.ExtrasPrice || cBreakDown.extrasPrice || '',
+        roomsDiscount: cBreakDown.RoomsDiscount || cBreakDown.roomsDiscount || '',
+        discountApplied: cBreakDown.DiscountApplied || cBreakDown.discountApplied || '',
+        voucherApplied: cBreakDown.VoucherApplied || cBreakDown.voucherApplied || '',
+        priceAfterVoucher: cBreakDown.PriceAfterVoucher || cBreakDown.priceAfterVoucher || '',
+        priceAfterDiscount: cBreakDown.PriceAfterDiscount || cBreakDown.priceAfterDiscount || '',
+      };
+
+      // Populate scope variables
+      guestDetails = gDetails;
+      roomDetails = typeof rDetails === 'string' ? JSON.parse(rDetails) : rDetails;
+      roomDetails = normalizeRoomDetails(roomDetails);
+      guestCount = gCount;
+      costBreakDown = cBreakDown;
+      Body = bookingDetails;
+      if (roomDetails.visitDate) bookingType = 'overnight';
+      else if (roomDetails.startDate) bookingType = 'daypass';
+    }
+
+    // Always use naira for amount
+    const transactionAmount = transactionData?.transaction_amount
+      ? Number(transactionData.transaction_amount) / 100
       : 0;
-    let paymentStatus = response.data?.data?.transaction_status || 'unknown';
+    let paymentStatus = transactionData?.transaction_status || 'unknown';
     let paymentRecord = null;
     let hasConflict = false;
+
     // Always create payment record, regardless of status
     if (bookingDetails) {
       // If VAT is not provided or invalid, calculate it from the total amount.
@@ -222,6 +305,16 @@ async function verifyTransaction(reference, bookingDetails = null) {
       ) {
         bookingDetails.totalCost = transactionAmount;
       }
+
+      // Normalize numeric fields to prevent cast errors from labels like "Daypass"
+      bookingDetails.discount = toNumber(bookingDetails.discount, 0);
+      bookingDetails.voucher = toNumber(bookingDetails.voucher, 0);
+      bookingDetails.multiNightDiscount = toNumber(
+        bookingDetails.multiNightDiscount,
+        0
+      );
+      bookingDetails.previousCost = toNumber(bookingDetails.previousCost, 0);
+
       try {
         let payment = await Payment.findOne({ ref: reference });
         if (payment) {
@@ -395,42 +488,65 @@ async function verifyTransaction(reference, bookingDetails = null) {
                 );
               }
 
-              const totalGuest =
-                roomDetails?.selectedRooms?.[0]?.guestCount?.adults || 0;
-
               const bookingData = {
-                totalGuest: totalGuest,
+                totalGuest: guestCount,
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
+                status: 'Confirmed',
               };
 
-              const bookingRecord = await overnightBooking.create(bookingData);
-              console.log(
-                '✅ SQUAD: Created overnight booking record for Squad payment:',
-                reference,
-                'Record ID:',
-                bookingRecord._id
-              );
+              // Check if booking already exists to prevent duplicate key error
+              const existingBooking = await overnightBooking.findOne({ shortId: reference });
+              if (existingBooking) {
+                console.log(
+                  '✅ SQUAD: Overnight booking already exists for reference:',
+                  reference,
+                  'Record ID:',
+                  existingBooking._id
+                );
+              } else {
+                const bookingRecord = await overnightBooking.create(bookingData);
+                console.log(
+                  '✅ SQUAD: Created overnight booking record for Squad payment:',
+                  reference,
+                  'Record ID:',
+                  bookingRecord._id
+                );
+              }
             }
             // Check if it's a daypass booking (has startDate)
             else if (roomDetails?.startDate) {
-              const totalGuest = roomDetails?.adultsCount || 0;
-
               const bookingData = {
-                totalGuest: totalGuest,
+                totalGuest: guestCount,
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
+                status: 'Confirmed',
               };
 
-              const bookingRecord = await daypassBooking.create(bookingData);
-              console.log(
-                '✅ SQUAD: Created daypass booking record for Squad payment:',
-                reference,
-                'Record ID:',
-                bookingRecord._id
-              );
+              // Check if booking already exists to prevent duplicate key error
+              const existingDaypass = await daypassBooking.findOne({ shortId: reference });
+              if (existingDaypass) {
+                if (existingDaypass.status !== 'Confirmed') {
+                  existingDaypass.status = 'Confirmed';
+                  await existingDaypass.save();
+                }
+                console.log(
+                  '✅ SQUAD: Daypass booking already exists for reference:',
+                  reference,
+                  'Record ID:',
+                  existingDaypass._id
+                );
+              } else {
+                const bookingRecord = await daypassBooking.create(bookingData);
+                console.log(
+                  '✅ SQUAD: Created daypass booking record for Squad payment:',
+                  reference,
+                  'Record ID:',
+                  bookingRecord._id
+                );
+              }
             } else {
               console.log(
                 '❌ SQUAD: No visitDate or startDate found in roomDetails, cannot determine booking type'
@@ -471,9 +587,9 @@ async function verifyTransaction(reference, bookingDetails = null) {
         console.error('Failed to create Squad payment record:', paymentError);
       }
     }
-    // Log booking attempt with naira amount and correct status
+    // Update the existing booking log entry (created during initiation) instead of creating a new one
     try {
-      await BookingLogger.logBookingAttempt({
+      await BookingLogger.updateOrCreateBookingLog({
         bookingId: reference,
         userId: bookingDetails?.email || 'Unknown',
         status: paymentStatus === 'success' ? 'success' : paymentStatus,
@@ -637,30 +753,25 @@ async function verifyTransaction(reference, bookingDetails = null) {
       checkIn: roomDetails.visitDate
         ? formatDate(roomDetails.visitDate)
         : roomDetails.startDate
-        ? formatDate(roomDetails.startDate)
-        : '',
+          ? formatDate(roomDetails.startDate)
+          : '',
       checkOut: roomDetails.endDate ? formatDate(roomDetails.endDate) : 'N/A',
       numberOfGuests:
         roomDetails?.visitDate && roomDetails?.selectedRooms?.[0]?.guestCount
-          ? `${roomDetails.selectedRooms[0].guestCount.adults ?? 0} Adults, ${
-              roomDetails.selectedRooms[0].guestCount.children ?? 0
-            } Children, ${
-              roomDetails.selectedRooms[0].guestCount.toddlers ?? 0
-            } Toddlers, ${
-              roomDetails.selectedRooms[0].guestCount.infants ?? 0
-            } Infants`
-          : `${guestCount.adults ?? 0} Adults, ${
-              guestCount.children ?? 0
-            } Children, ${guestCount.toddler ?? 0} Toddlers, ${
-              guestCount.infants ?? 0
-            } Infants`,
+          ? `${roomDetails.selectedRooms[0].guestCount.adults ?? 0} Adults, ${roomDetails.selectedRooms[0].guestCount.children ?? 0
+          } Children, ${roomDetails.selectedRooms[0].guestCount.toddlers ?? 0
+          } Toddlers, ${roomDetails.selectedRooms[0].guestCount.infants ?? 0
+          } Infants`
+          : `${guestCount.adults ?? 0} Adults, ${guestCount.children ?? 0
+          } Children, ${guestCount.toddler ?? 0} Toddlers, ${guestCount.infants ?? 0
+          } Infants`,
       numberOfNights:
         roomDetails.visitDate && roomDetails.endDate
           ? Math.ceil(
-              (new Date(roomDetails.endDate) -
-                new Date(roomDetails.visitDate)) /
-                (1000 * 60 * 60 * 24)
-            )
+            (new Date(roomDetails.endDate) -
+              new Date(roomDetails.visitDate)) /
+            (1000 * 60 * 60 * 24)
+          )
           : 'N/A',
       extras: extrasList,
       subTotal: bookingDetails.subTotal
@@ -671,27 +782,27 @@ async function verifyTransaction(reference, bookingDetails = null) {
         costBreakDown.multiNightDiscount
       )
         ? formatPrice(
-            getField('multiNightDiscount', costBreakDown.multiNightDiscount)
-          )
+          getField('multiNightDiscount', costBreakDown.multiNightDiscount)
+        )
         : '0',
       clubMemberDiscount: getField(
         'clubMemberDiscount',
         costBreakDown.clubDiscountApplied
       )
         ? formatPrice(
-            getField('clubMemberDiscount', costBreakDown.clubDiscountApplied)
-          )
+          getField('clubMemberDiscount', costBreakDown.clubDiscountApplied)
+        )
         : '0',
       multiNightDiscountAvailable: getField(
         'multiNightDiscountAvailable',
         costBreakDown.multiNightDiscountAvailable
       )
         ? formatPrice(
-            getField(
-              'multiNightDiscountAvailable',
-              costBreakDown.multiNightDiscountAvailable
-            )
+          getField(
+            'multiNightDiscountAvailable',
+            costBreakDown.multiNightDiscountAvailable
           )
+        )
         : '',
       vat: bookingDetails.vat ? `${formatPrice(bookingDetails.vat)}` : '',
       totalCost: bookingDetails.totalCost || transactionAmount,
@@ -703,37 +814,37 @@ async function verifyTransaction(reference, bookingDetails = null) {
         costBreakDown.voucherApplied === 'true'
           ? 'Yes'
           : costBreakDown.voucherApplied === 'false'
-          ? 'No'
-          : 'N/A',
+            ? 'No'
+            : 'N/A',
       discountApplied:
         costBreakDown.discountApplied === 'true'
           ? 'Yes'
           : costBreakDown.discountApplied === 'false'
-          ? 'No'
-          : 'N/A',
+            ? 'No'
+            : 'N/A',
       clubDiscountApplied:
         costBreakDown.clubDiscountApplied === 'true'
           ? 'Yes'
           : costBreakDown.clubDiscountApplied === 'false'
-          ? 'No'
-          : 'N/A',
+            ? 'No'
+            : 'N/A',
       priceAfterVoucher: isValidNumber(costBreakDown.priceAfterVoucher)
         ? formatPrice(costBreakDown.priceAfterVoucher)
         : isValidNumber(bookingDetails.totalCost)
-        ? formatPrice(bookingDetails.totalCost)
-        : 'N/A',
+          ? formatPrice(bookingDetails.totalCost)
+          : 'N/A',
       priceAfterDiscount: isValidNumber(costBreakDown.priceAfterDiscount)
         ? formatPrice(costBreakDown.priceAfterDiscount)
         : isValidNumber(bookingDetails.totalCost)
-        ? formatPrice(bookingDetails.totalCost)
-        : 'N/A',
+          ? formatPrice(bookingDetails.totalCost)
+          : 'N/A',
       priceAfterClubDiscount: isValidNumber(
         costBreakDown.priceAfterClubDiscount
       )
         ? formatPrice(costBreakDown.priceAfterClubDiscount)
         : isValidNumber(bookingDetails.totalCost)
-        ? formatPrice(bookingDetails.totalCost)
-        : 'N/A',
+          ? formatPrice(bookingDetails.totalCost)
+          : 'N/A',
     };
     console.log('Email Context: ', emailContext);
     try {
@@ -743,17 +854,29 @@ async function verifyTransaction(reference, bookingDetails = null) {
         'confirmation',
         emailContext
       );
-      await sendEmail(
-        'bookings@jarabeachresort.com',
-        'New Booking Confirmed',
-        'confirmation',
-        emailContext
-      );
     } catch (emailError) {
       console.error(
         'Failed to send Squad payment confirmation emails:',
         emailError
       );
+    }
+
+    // Auto-create or update guest record for Squad payments
+    if (paymentStatus === 'success' && bookingDetails) {
+      try {
+        const isOvernight = !!(roomDetails?.visitDate || roomDetails?.selectedRooms);
+        const guestVisitData = {
+          ...guestDetails,
+          name: guestDetails.firstname ? `${guestDetails.firstname} ${guestDetails.lastname || ''}`.trim() : bookingDetails.name,
+          email: guestDetails.email || bookingDetails.email,
+          mobile: guestDetails.phone || guestDetails.mobile || guestDetails.phoneNumber
+        };
+
+        await processGuestVisit(guestVisitData, isOvernight);
+        console.log('✅ SQUAD: Guest record consolidated via guestManager', { email: guestVisitData.email });
+      } catch (guestErr) {
+        console.error('❌ SQUAD: Failed to process guest record via guestManager', guestErr.message);
+      }
     }
     return {
       status: response.data.status,
@@ -762,7 +885,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
       paymentRecord: paymentRecord || null,
     };
   } catch (err) {
-    await BookingLogger.logBookingAttempt({
+    await BookingLogger.updateOrCreateBookingLog({
       bookingId: reference,
       userId: 'Unknown',
       status: 'failed',

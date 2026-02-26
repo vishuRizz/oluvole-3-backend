@@ -43,6 +43,9 @@ const carServiceRoute = require('./carService.router');
 const adminLogsRoutes = require('./adminLogs.router');
 const club100Route = require('./club100');
 const gamingRoute = require('./gaming.router');
+const surveyRoute = require('./survey.router');
+const retreatDaypassOptionRoute = require('./retreatDaypassOption.router');
+const newsletterRoute = require('./newsletter.router');
 
 // booking logs routes
 const bookingLogsRoutes = require('./bookingLogs.router');
@@ -70,6 +73,7 @@ allRoutes.use('/massage', massageRoute);
 allRoutes.use('/loadging', loadgingRoute);
 allRoutes.use('/cake', cakeRoute);
 allRoutes.use('/option', optionRoute);
+allRoutes.use('/retreat-option', retreatDaypassOptionRoute);
 allRoutes.use('/personal', personalRoute);
 allRoutes.use('/riding', ridingRoute);
 allRoutes.use('/drink', drinkRoute);
@@ -94,5 +98,11 @@ allRoutes.use('/gaming', gamingRoute);
 
 // booking logs routes
 allRoutes.use('/booking-logs', bookingLogsRoutes);
+
+// survey routes
+allRoutes.use('/survey', surveyRoute);
+
+// newsletter routes
+allRoutes.use('/newsletter', newsletterRoute);
 
 module.exports = { allRoutes };

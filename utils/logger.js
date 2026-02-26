@@ -37,9 +37,8 @@ const logger = createLogger({
     format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), // Add timestamp
     format.errors({ stack: true }), // Include stack traces for errors
     format.printf(({ timestamp, level, message, ...meta }) => {
-      return `${timestamp} [${level.toUpperCase()}]: ${message} ${
-        Object.keys(meta).length ? JSON.stringify(meta) : ""
-      }`;
+      return `${timestamp} [${level.toUpperCase()}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta) : ""
+        }`;
     }) // Custom log format
   ),
   transports: [

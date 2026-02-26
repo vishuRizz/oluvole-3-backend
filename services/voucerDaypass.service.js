@@ -1,6 +1,6 @@
 const { dayPassVouherModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
-const {AdminLogEvent} = require("./adminLogs.service");
+const { AdminLogEvent } = require("./adminLogs.service");
 
 const {
   ErrorResponse,
@@ -9,7 +9,7 @@ const {
 
 const createDiscount = asyncErrorHandler(async (req, res) => {
   let staffInfo = await dayPassVouherModel.create(req.body);
-  AdminLogEvent(req.body.adminId,'None','Added New Day Pass Vouchers','Success',"Successfully Added New Day Pass Vouchers ("+staffInfo.code+") ",staffInfo._id)
+  AdminLogEvent(req.body.adminId, 'None', 'Added New Day Pass Vouchers', 'Success', "Successfully Added New Day Pass Vouchers (" + staffInfo.code + ") ", staffInfo._id)
   res.status(200).json(staffInfo);
 });
 
@@ -27,7 +27,7 @@ const deleteDiscount = asyncErrorHandler(async (req, res) => {
   if (!deletevoucher) {
     throw new ErrorResponse("Invalid Id", statusCode.notFound);
   } else {
-    AdminLogEvent(req.body.adminId,'None','Delete Day Pass Vouchers','Success',"Successfully Deleted Day Pass Vouchers ("+deletevoucher.code+") ",'None')
+    AdminLogEvent(req.body.adminId, 'None', 'Delete Day Pass Vouchers', 'Success', "Successfully Deleted Day Pass Vouchers (" + deletevoucher.code + ") ", 'None')
     res.status(200).json({ msg: "Discount Deleted" });
   }
 });
@@ -61,4 +61,14 @@ const validateVoucher = asyncErrorHandler(async (req, res) => {
     res.status(200).json({ voucher, newPrice });
   }
 });
-module.exports = { createDiscount, getAll, deleteDiscount, validateVoucher };
+
+const getPaginated = asyncErrorHandler(async (req, res) => {
+  const { paginate } = require("../utils/paginate");
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  const result = await paginate(dayPassVouherModel, {}, { page, limit });
+  res.status(200).json(result);
+});
+
+module.exports = { createDiscount, getAll, deleteDiscount, validateVoucher, getPaginated };

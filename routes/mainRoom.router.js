@@ -9,12 +9,14 @@ const {
   getAllSubRoom,
   getAllSubRoom2,
   getBookingsForRoom,
+  getRoomPaginated,
 } = require("../services/mainRooms.service");
 
 const router = require("express").Router();
 
 router.post("/create", createRoom);
 router.get("/get", getRoom);
+router.get("/paginated", getRoomPaginated);
 router.put("/update/:id", updateRoom);
 router.get("/bookings/:roomId", getBookingsForRoom);
 router.post("/sub/create", createSubRoom);

@@ -41,4 +41,13 @@ const validateDiscount = asyncErrorHandler(async (req, res) => {
   }
 });
 
-module.exports = { createDiscount, getAll, deleteDiscount, validateDiscount };
+const getPaginated = asyncErrorHandler(async (req, res) => {
+  const { paginate } = require("../utils/paginate");
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  const result = await paginate(dayPassDiscountModel, {}, { page, limit });
+  res.status(200).json(result);
+});
+
+module.exports = { createDiscount, getAll, deleteDiscount, validateDiscount, getPaginated };

@@ -4,7 +4,11 @@ const { sendEmail } = require("../config/mail.config");
 const { SubRooms } = require("../models/rooms.schema");
 const { voucherModel } = require("../models");
 const { dayPassVouherModel } = require("../models");
-const {sendRenewalReminders} = require("./club100.service");
+const { sendRenewalReminders } = require("./club100.service");
+const {
+  sendBirthdayEmails,
+  BIRTHDAY_TIMEZONE,
+} = require("./birthdayEmail.service");
 function formatDate(dateString) {
   const date = new Date(dateString);
   const day = date.getDate();
@@ -12,16 +16,16 @@ function formatDate(dateString) {
   const suffix = (v - 20) % 10 === 1
     ? "st"
     : (v - 20) % 10 === 2
-    ? "nd"
-    : (v - 20) % 10 === 3
-    ? "rd"
-    : v === 1
-    ? "st"
-    : v === 2
-    ? "nd"
-    : v === 3
-    ? "rd"
-    : "th";
+      ? "nd"
+      : (v - 20) % 10 === 3
+        ? "rd"
+        : v === 1
+          ? "st"
+          : v === 2
+            ? "nd"
+            : v === 3
+              ? "rd"
+              : "th";
   const month = date.toLocaleString("en-US", { month: "long" });
   const year = date.getFullYear();
   return `${day}${suffix}, ${month} ${year}`;
@@ -69,11 +73,27 @@ cron.schedule("* * * * *", async () => {
 
     for (const payment of pendingPayments) {
       try {
-        const guestDetails = JSON.parse(payment.guestDetails);
-        const roomDetails = JSON.parse(payment.roomDetails);
-        const bookingInfo = payment.bookingInfo
-          ? JSON.parse(payment.bookingInfo)
-          : null;
+        const safeParse = (data) => {
+          if (!data) return null;
+          if (typeof data === 'object') return data;
+          try {
+            return JSON.parse(data);
+          } catch (e) {
+            return null;
+          }
+        };
+
+        const guestDetails = safeParse(payment.guestDetails);
+        const roomDetails = safeParse(payment.roomDetails);
+        const bookingInfo = safeParse(payment.bookingInfo);
+
+        if (!guestDetails || !roomDetails) {
+          console.warn(`Skipping payment ${payment._id}: Missing or invalid guestDetails/roomDetails`);
+          // Optionally mark it as something else to avoid re-processing invalid data
+          payment.status = "Error_InvalidData";
+          await payment.save();
+          continue;
+        }
 
         if (roomDetails.selectedRooms) {
           for (const room of roomDetails.selectedRooms) {
@@ -86,13 +106,13 @@ cron.schedule("* * * * *", async () => {
         await payment.save();
         const totalGuests = roomDetails?.visitDate
           ? roomDetails?.selectedRooms?.[0]?.guestCount?.adults +
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
-            counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).children +
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).toddlers +
+          counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants
           : bookingInfo?.adultsAlcoholic +
-            bookingInfo?.adultsNonAlcoholic +
-            bookingInfo?.Nanny +
-            bookingInfo?.childTotal;
+          bookingInfo?.adultsNonAlcoholic +
+          bookingInfo?.Nanny +
+          bookingInfo?.childTotal;
 
         const emailContext = {
           name: payment.name,
@@ -109,35 +129,30 @@ cron.schedule("* * * * *", async () => {
             ? `${formatDate(roomDetails?.endDate)}`
             : `${formatDate(roomDetails?.startDate)}`,
           numberOfGuests: roomDetails?.visitDate
-            ? `${
-                roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
-              } Adults, ${
-                counting(roomDetails?.selectedRooms?.[0]?.guestCount)
-                  .children ?? 0
-              } Children ${
-                counting(roomDetails?.selectedRooms?.[0]?.guestCount)
-                  .toddlers ?? 0
-              } Toddlers ${
-                counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ??
-                0
-              } Infants`
+            ? `${roomDetails?.selectedRooms?.[0]?.guestCount?.adults ?? 0
+            } Adults, ${counting(roomDetails?.selectedRooms?.[0]?.guestCount)
+              .children ?? 0
+            } Children ${counting(roomDetails?.selectedRooms?.[0]?.guestCount)
+              .toddlers ?? 0
+            } Toddlers ${counting(roomDetails?.selectedRooms?.[0]?.guestCount).infants ??
+            0
+            } Infants`
             : bookingInfo
-            ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
-            : `${roomDetails?.adultsCount ?? 0} Adults, ${
-                roomDetails?.childrenCount ?? 0
+              ? `${bookingInfo?.adultsAlcoholic} Adults Alcoholic, ${bookingInfo?.adultsNonAlcoholic} Adults Non Alcoholic, ${bookingInfo?.Nanny} Nanny, ${bookingInfo?.childTotal} Child`
+              : `${roomDetails?.adultsCount ?? 0} Adults, ${roomDetails?.childrenCount ?? 0
               } Children`,
           numberOfNights: roomDetails?.visitDate
             ? calculateNumberOfNights(
-                roomDetails?.visitDate,
-                roomDetails?.endDate
-              )
+              roomDetails?.visitDate,
+              roomDetails?.endDate
+            )
             : "Day Pass",
           extras:
             roomDetails?.visitDate && roomDetails?.finalData
               ? roomDetails?.finalData?.map((extra) => ` ${extra.title}`)
               : roomDetails?.startDate && roomDetails?.extras
-              ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
-              : "No Extras",
+                ? roomDetails?.extras?.map((extra) => ` ${extra.title}`)
+                : "No Extras",
           subTotal: formatPrice(payment.subTotal),
           multiNightDiscount: payment.discount.toLocaleString(),
           clubMemberDiscount: payment.voucher,
@@ -190,11 +205,11 @@ cron.schedule("* * * * *", async () => {
           emailContext
         );
       } catch (err) {
-        console.log("failed to cancel");
+        console.error(`Failed to cancel payment ${payment?._id || 'unknown'}:`, err.message);
       }
     }
   } catch (err) {
-    console.log("failed to cancel");
+    console.error("Critical error in payment cancellation cron:", err.message);
   }
 });
 
@@ -229,37 +244,13 @@ const updateExpiredVouchers = async () => {
 // Schedule the task to run daily at midnight
 cron.schedule("0 0 * * *", updateExpiredVouchers);
 
-// Schedule the task to run every day at 12 noon for post-checkout emails
-cron.schedule("0 12 * * *", async () => {
-  try {
-    const today = new Date().toISOString().split("T")[0];
-    const payments = await paymentModel.find({ status: "Success" });
-    // Filter payments based on the endDate inside the roomDetails JSON
-    const filteredPayments = payments.filter((payment) => {
-      return JSON.parse(payment.roomDetails)?.endDate === today; // Check if the endDate matches
-    });
-
-    filteredPayments.forEach((payment) => {
-      const guestDetails = JSON.parse(payment.guestDetails);
-      const emailContext = {
-        name: payment.name,
-      };
-
-      sendEmail(
-        guestDetails.email,
-        "Thanks for choosing Jara Beach Resort 🌴",
-        "post_checkout_email",
-        emailContext
-      );
-    });
-
-    console.log("Post Checkout Emails sent to users checking out today.");
-  } catch (error) {
-    console.error("Error sending post checkout emails:", error);
-  }
-});
+// Note: Post-checkout email cron job removed — replaced by instant survey email on admin checkout action
+// (see bookingLogs.router.js PATCH /check-out/:id)
 
 // Schedule the task to run weekly
 cron.schedule("0 9 * * 1", sendRenewalReminders); // Runs every Monday at 9:00 AM
+
+// Schedule birthday emails daily at 12:01 AM (resort local time)
+cron.schedule("1 0 * * *", sendBirthdayEmails, { timezone: BIRTHDAY_TIMEZONE });
 
 
