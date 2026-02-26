@@ -1,9 +1,9 @@
-const { asyncErrorHandler } = require('../middlewares/error/error');
-const { overnightBooking } = require('../models/overnight.booking.schema');
-const { RoomTypes, SubRooms } = require('../models/rooms.schema');
-const { paymentModel } = require('../models');
-const { getStoredNightlyAssignments } = require('../utils/nightlyAssignments');
-const BlockedRoom = require('../models/blockedRoom.schema');
+const { asyncErrorHandler } = require("../middlewares/error/error");
+const { overnightBooking } = require("../models/overnight.booking.schema");
+const { RoomTypes, SubRooms } = require("../models/rooms.schema");
+const { paymentModel } = require("../models");
+const { getStoredNightlyAssignments } = require("../utils/nightlyAssignments");
+const BlockedRoom = require("../models/blockedRoom.schema");
 
 const createRoom = asyncErrorHandler(async (req, res) => {
   let create = await RoomTypes.create(req.body);
@@ -37,21 +37,21 @@ const updateSubRoom = asyncErrorHandler(async (req, res) => {
 
 const deleteSubRoom = asyncErrorHandler(async (req, res) => {
   let del = await SubRooms.findByIdAndDelete(req.params.id);
-  res.status(200).json({ msg: 'SUB ROOM DELETED' });
+  res.status(200).json({ msg: "SUB ROOM DELETED" });
 });
 
 const getAllSubRoom = asyncErrorHandler(async (req, res) => {
-  let allRooms = await SubRooms.find({}).populate('roomId');
+  let allRooms = await SubRooms.find({}).populate("roomId");
   res.status(200).json(allRooms);
 });
 
 const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
-  console.log('request body', req.body);
+  console.log("request body", req.body);
   let { visitDate, endDate, returnPerNightAvailability } = req.body;
   if (!visitDate || !endDate) {
     return res
       .status(400)
-      .json({ error: 'visitDate and endDate are required' });
+      .json({ error: "visitDate and endDate are required" });
   }
 
   let startingDate = new Date(visitDate);
@@ -62,24 +62,24 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     endingDate.setDate(endingDate.getDate() + 1);
   }
 
-  console.log('🔍 DEBUG: Query dates:', {
+  console.log("🔍 DEBUG: Query dates:", {
     startingDate: startingDate.toISOString(),
     endingDate: endingDate.toISOString(),
   });
 
-  const startDateString = startingDate.toISOString().split('T')[0];
-  const endDateString = endingDate.toISOString().split('T')[0];
+  const startDateString = startingDate.toISOString().split("T")[0];
+  const endDateString = endingDate.toISOString().split("T")[0];
 
   const [bookings, blockedRooms, allRooms, allPayments] = await Promise.all([
     overnightBooking
       .find({
         $or: [
           {
-            'bookingDetails.visitDate': { $lte: endDateString },
-            'bookingDetails.endDate': { $gte: startDateString },
+            "bookingDetails.visitDate": { $lte: endDateString },
+            "bookingDetails.endDate": { $gte: startDateString },
           },
           {
-            'bookingDetails.roomAssignments.date': {
+            "bookingDetails.roomAssignments.date": {
               $gte: startingDate,
               $lt: endingDate,
             },
@@ -87,17 +87,15 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
         ],
       })
       .lean()
-      .select('shortId bookingDetails'),
+      .select("shortId bookingDetails"),
     BlockedRoom.find({
-      date: {
-        $gte: startingDate,
-        $lt: endingDate,
-      },
+      arrivalDate: { $lt: endingDate },
+      departureDate: { $gt: startingDate },
     })
       .lean()
-      .select('roomId date'),
-    SubRooms.find({}).populate('roomId').lean(),
-    paymentModel.find({}).lean().select('ref status'),
+      .select("roomId date"),
+    SubRooms.find({}).populate("roomId").lean(),
+    paymentModel.find({}).lean().select("ref status"),
   ]);
 
   // FIX N+1 PROBLEM: Fetch all payments in one query
@@ -105,20 +103,28 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   const payments = await paymentModel
     .find({
       ref: { $in: bookingRefs },
-      status: { $in: ['Success', 'Pending'] },
+      status: { $in: ["Success", "Pending"] },
     })
     .lean()
-    .select('ref status');
+    .select("ref status");
   const paymentMap = new Map(payments.map((p) => [p.ref, p]));
 
-  console.log('🔍 DEBUG: Query Range:', {
+  console.log("🔍 DEBUG: Query Range:", {
     startingDate: startingDate.toISOString(),
     endingDate: endingDate.toISOString(),
   });
-  console.log('🔍 DEBUG: Total bookings found (all):', bookings.length);
-  console.log('🔍 DEBUG: Payments with Success/Pending:', payments.length);
   console.log(
-    '🔍 DEBUG: All payment statuses:',
+    "🔍 DEBUG: Total bookings found (all):",
+    bookings.length,
+    bookings
+  );
+  console.log(
+    "🔍 DEBUG: Payments with Success/Pending:",
+    payments.length,
+    payments
+  );
+  console.log(
+    "🔍 DEBUG: All payment statuses:",
     allPayments.reduce((acc, p) => {
       acc[p.status] = (acc[p.status] || 0) + 1;
       return acc;
@@ -126,7 +132,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   );
 
   if (bookings.length > 0) {
-    console.log('🔍 DEBUG: All bookings in date range:');
+    console.log("🔍 DEBUG: All bookings in date range:");
     bookings.forEach((b, idx) => {
       const payment = allPayments.find((p) => p.ref === b.shortId);
       console.log(`  ${idx + 1}. Booking ${b.shortId}:`, {
@@ -137,7 +143,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
         selectedRoomsCount: b.bookingDetails?.selectedRooms?.length || 0,
         selectedRoomIds:
           b.bookingDetails?.selectedRooms?.map((r) => r.id) || [],
-        paymentStatus: payment?.status || 'NO PAYMENT',
+        paymentStatus: payment?.status || "NO PAYMENT",
       });
     });
   }
@@ -147,7 +153,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   for (const bookingItem of bookings) {
     if (!bookingItem.bookingDetails) {
       console.log(
-        'booking details not found for booking with id ',
+        "booking details not found for booking with id ",
         bookingItem._id
       );
       continue; // Skip to the next booking
@@ -178,7 +184,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
             roomOccupancyMap.set(roomId, new Set());
           }
 
-          const dateString = assignmentDate.toISOString().split('T')[0];
+          const dateString = assignmentDate.toISOString().split("T")[0];
           roomOccupancyMap.get(roomId).add(dateString);
           console.log(`  ✓ Marked room ${roomId} as occupied on ${dateString}`);
         }
@@ -193,7 +199,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       );
       Object.entries(bookingItem.bookingDetails.multiNightSelections).forEach(
         ([dateString, rooms]) => {
-          const nightDate = new Date(dateString + 'T00:00:00.000Z');
+          const nightDate = new Date(dateString + "T00:00:00.000Z");
 
           if (nightDate >= startingDate && nightDate < endingDate) {
             rooms.forEach((roomSelection) => {
@@ -203,7 +209,8 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
               }
               roomOccupancyMap.get(roomId).add(dateString);
               console.log(
-                `  ✓ Marked room ${roomId} (${roomSelection.room?.title || 'N/A'
+                `  ✓ Marked room ${roomId} (${
+                  roomSelection.room?.title || "N/A"
                 }) as occupied on ${dateString}`
               );
             });
@@ -231,10 +238,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
           const maxDate = new Date(Math.min(endDate2, endingDate));
 
           while (currentDate < maxDate) {
-            const dateString = currentDate.toISOString().split('T')[0];
+            const dateString = currentDate.toISOString().split("T")[0];
             roomOccupancyMap.get(roomId).add(dateString);
             console.log(
-              `  ✓ Marked room ${roomId} (${selectedRoom.title || 'N/A'
+              `  ✓ Marked room ${roomId} (${
+                selectedRoom.title || "N/A"
               }) as occupied on ${dateString}`
             );
             currentDate.setDate(currentDate.getDate() + 1);
@@ -245,7 +253,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       }
     }
   }
-
+  console.log("🔒 DEBUG: Processing blocked rooms", blockedRooms);
   console.log(`🔒 Processing ${blockedRooms.length} blocked room entries`);
   for (const blockedRoom of blockedRooms) {
     const roomId = blockedRoom.roomId.toString();
@@ -255,10 +263,11 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       roomOccupancyMap.set(roomId, new Set());
     }
 
-    const dateString = blockedDate.toISOString().split('T')[0];
+    const dateString = blockedDate.toISOString().split("T")[0];
     roomOccupancyMap.get(roomId).add(dateString);
     console.log(
-      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'
+      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${
+        blockedRoom.description || "N/A"
       })`
     );
   }
@@ -267,20 +276,21 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     (endingDate - startingDate) / (1000 * 60 * 60 * 24)
   );
 
-  console.log('🔍 DEBUG: Total rooms before filter:', allRooms.length);
-  console.log('🔍 DEBUG: Rooms in occupancy map:', roomOccupancyMap.size);
-  console.log('🔍 DEBUG: Blocked rooms count:', blockedRooms.length);
+  console.log("🔍 DEBUG: Total rooms before filter:", allRooms.length);
+  console.log("🔍 DEBUG: Rooms in occupancy map:", roomOccupancyMap.size);
+  console.log("🔍 DEBUG: Blocked rooms count:", blockedRooms.length);
 
   if (returnPerNightAvailability) {
     const nightlyAvailability = {};
 
     let currentDate = new Date(startingDate);
     while (currentDate < endingDate) {
-      const dateString = currentDate.toISOString().split('T')[0];
+      const dateString = currentDate.toISOString().split("T")[0];
 
       nightlyAvailability[dateString] = allRooms.map((room) => {
         const roomId = room._id.toString();
-        const bookedDatesForThisRoom = roomOccupancyMap.get(roomId) || new Set();
+        const bookedDatesForThisRoom =
+          roomOccupancyMap.get(roomId) || new Set();
         const isOccupied = bookedDatesForThisRoom.has(dateString);
 
         const groupedRooms = {
@@ -294,7 +304,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
           children: room.children,
           infant: room.infant,
           toddler: room.toddler,
-          roomId: room.roomId
+          roomId: room.roomId,
         };
 
         return groupedRooms;
@@ -303,13 +313,13 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    console.log('✅ DEBUG: Returning per-night availability');
+    console.log("✅ DEBUG: Returning per-night availability");
     return res.status(200).json({ nightlyAvailability });
   }
 
   const availableRooms = allRooms.map((room) => {
     const roomId = room._id.toString();
-    const roomTitle = room.roomId?.title || 'Unknown';
+    const roomTitle = room.roomId?.title || "Unknown";
     const bookedDatesForThisRoom = roomOccupancyMap.get(roomId) || new Set();
 
     let availableNights = 0;
@@ -318,7 +328,7 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
     let currentDate = new Date(startingDate);
     while (currentDate < endingDate) {
-      const dateString = currentDate.toISOString().split('T')[0];
+      const dateString = currentDate.toISOString().split("T")[0];
 
       if (bookedDatesForThisRoom.has(dateString)) {
         occupiedNights++;
@@ -335,7 +345,9 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
 
     if (!isFullyAvailable) {
       console.log(
-        `🚫 Room ${roomTitle} (${roomId}) is occupied on: ${occupiedDatesArray.join(', ')}`
+        `🚫 Room ${roomTitle} (${roomId}) is occupied on: ${occupiedDatesArray.join(
+          ", "
+        )}`
       );
     }
 
@@ -345,18 +357,18 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
       availableRoom: isFullyAvailable ? room.availableRoom : 0,
       availableNights,
       totalNights,
-      occupiedDates: occupiedDatesArray
+      occupiedDates: occupiedDatesArray,
     };
   });
 
-  console.log('✅ DEBUG: Total rooms after processing:', availableRooms.length);
+  console.log("✅ DEBUG: Total rooms after processing:", availableRooms.length);
   res.status(200).json(availableRooms);
 });
 const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
   const { roomId } = req.params;
   const bookings = await overnightBooking
     .find({
-      'bookingDetails.selectedRooms.id': roomId,
+      "bookingDetails.selectedRooms.id": roomId,
     })
     .lean();
 
