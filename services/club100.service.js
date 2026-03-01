@@ -7,6 +7,18 @@ const { clubModel } = require("../models");
 const {sendEmail} = require("../config/mail.config");
 const {statusCode} = require("../utils/statusCode");
 
+const formatEmailDate = (dateValue) => {
+  const parsedDate = dateValue ? new Date(dateValue) : null;
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+    return "N/A";
+  }
+  return parsedDate.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
 // Register a new Club100 member
 const registerClubMember = asyncErrorHandler(async (req, res) => {
   const { name, email, clubID, validUntil } = req.body;
@@ -47,6 +59,8 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
           {
               memberName: name,
               email: email,
+              membershipStart: formatEmailDate(registerMember.createdAt),
+              membershipEnd: formatEmailDate(registerMember.validUntil),
           }
       );
 

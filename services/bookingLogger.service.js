@@ -4,8 +4,55 @@ const { overnightBooking, daypassBooking } = require('../models/overnight.bookin
 const { sendEmail } = require('../config/mail.config');
 const Guest = require('../models/guest.schema');
 const { Survey } = require('../models/survey.schema');
+const mongoose = require('mongoose');
+
+const getPublicBaseUrl = () => String(process.env.BASE_URL || '').replace(/\/+$/, '');
+
+const toAbsolutePhotoUrl = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+    const normalizedPath = trimmed.replace(/^\/+/, '');
+    const baseUrl = getPublicBaseUrl();
+    if (!baseUrl) return normalizedPath;
+
+    if (normalizedPath.startsWith('uploads/')) {
+        return `${baseUrl}/${normalizedPath}`;
+    }
+    return `${baseUrl}/${normalizedPath}`;
+};
 
 class BookingLogger {
+    static async _resolveCanonicalRef(ref) {
+        const rawRef = String(ref || '').trim();
+        if (!rawRef) return rawRef;
+
+        if (!mongoose.Types.ObjectId.isValid(rawRef)) {
+            return rawRef;
+        }
+
+        const [paymentById, overnightById, daypassById, bookingLogById, bookingLogByBookingId] = await Promise.all([
+            paymentModel.findById(rawRef).select('ref').lean(),
+            overnightBooking.findById(rawRef).select('shortId').lean(),
+            daypassBooking.findById(rawRef).select('shortId').lean(),
+            BookingLog.findById(rawRef).select('bookingId').lean(),
+            BookingLog.findOne({ bookingId: rawRef }).sort({ timestamp: -1 }).select('bookingId').lean(),
+        ]);
+
+        if (paymentById?.ref) return paymentById.ref;
+        if (overnightById?.shortId) return overnightById.shortId;
+        if (daypassById?.shortId) return daypassById.shortId;
+
+        const logBookingId = bookingLogById?.bookingId || bookingLogByBookingId?.bookingId;
+        if (!logBookingId) return rawRef;
+        if (!mongoose.Types.ObjectId.isValid(logBookingId)) return logBookingId;
+
+        const paymentFromLogId = await paymentModel.findById(logBookingId).select('ref').lean();
+        return paymentFromLogId?.ref || logBookingId;
+    }
+
     static async logBookingAttempt(bookingData) {
         try {
             const logEntry = new BookingLog({
@@ -119,8 +166,19 @@ class BookingLogger {
             BookingLog.countDocuments(),
         ]);
 
+        const normalizedData = await Promise.all(
+            data.map(async (logDoc) => {
+                const log = logDoc.toObject();
+                const canonicalRef = await this._resolveCanonicalRef(log.bookingId);
+                return {
+                    ...log,
+                    bookingId: canonicalRef || log.bookingId,
+                };
+            })
+        );
+
         return {
-            data,
+            data: normalizedData,
             total,
             page,
             limit,
@@ -348,13 +406,16 @@ class BookingLogger {
     // ─── Get complete booking status by reference ───
     static async getBookingStatus(ref, options = {}) {
         const { skipAutoVerify = false } = options;
+        const normalizedRef = String(ref || '').trim();
+        const canonicalRef = await this._resolveCanonicalRef(normalizedRef);
+        const effectiveRef = canonicalRef || normalizedRef;
 
         // Fetch all data in parallel
         const [paymentResult, overnightResult, daypassResult, bookingLogResult] = await Promise.allSettled([
-            paymentModel.findOne({ ref }),
-            overnightBooking.findOne({ shortId: ref }),
-            daypassBooking.findOne({ shortId: ref }),
-            BookingLog.findOne({ bookingId: ref }).sort({ timestamp: -1 }),
+            paymentModel.findOne({ ref: effectiveRef }),
+            overnightBooking.findOne({ shortId: effectiveRef }),
+            daypassBooking.findOne({ shortId: effectiveRef }),
+            BookingLog.findOne({ bookingId: effectiveRef }).sort({ timestamp: -1 }),
         ]);
 
         const payment = paymentResult.status === 'fulfilled' ? paymentResult.value : null;
@@ -388,8 +449,8 @@ class BookingLogger {
         if (shouldAutoVerifySquad) {
             try {
                 const squadService = require('./squad.service');
-                await squadService.verifyTransaction(ref);
-                return this.getBookingStatus(ref, { skipAutoVerify: true });
+                await squadService.verifyTransaction(effectiveRef);
+                return this.getBookingStatus(effectiveRef, { skipAutoVerify: true });
             } catch (verifyError) {
                 console.error('Auto Squad verification failed in getBookingStatus:', verifyError.message);
             }
@@ -455,7 +516,7 @@ class BookingLogger {
         // Fetch guest profile and survey in parallel
         const [guestProfileResult, surveyResult] = await Promise.allSettled([
             guestEmail ? Guest.findOne({ email: guestEmail }) : Promise.resolve(null),
-            Survey.findOne({ bookingId: ref }),
+            Survey.findOne({ bookingId: effectiveRef }),
         ]);
 
         const guestProfile = guestProfileResult.status === 'fulfilled' ? guestProfileResult.value : null;
@@ -485,7 +546,7 @@ class BookingLogger {
         );
 
         return {
-            ref,
+            ref: effectiveRef,
             bookingType,
             found: !!(payment || booking || bookingLog),
 
@@ -497,7 +558,7 @@ class BookingLogger {
                 dob: guestInfo.dob || guestInfo.dateOfBirth || null,
                 keepInfo: guestInfo.keepInfo ?? false,
                 howDidYouFindUs: guestInfo.howDidYouFindUs || guestInfo.referral || guestInfo.aboutUs || 'N/A',
-                photo: guestInfo.photo || guestProfile?.photo || null,
+                photo: toAbsolutePhotoUrl(guestInfo.photo || guestProfile?.photo || null),
                 preferredCommunicationChannel: guestProfile?.preferredCommunicationChannel || guestInfo.preferredCommunicationChannel || guestInfo.communicationPreference || '',
                 gender: guestInfo.gender || guestProfile?.gender || '',
             },
@@ -552,7 +613,7 @@ class BookingLogger {
             },
 
             bookingInfo: {
-                bookingId: booking?.shortId || ref,
+                bookingId: booking?.shortId || payment?.ref || bookingLog?.bookingId || effectiveRef,
                 bookingDate: booking?.createdAt || payment?.createdAt || bookingLog?.timestamp || null,
                 bookingStatus: this._resolveBookingStatus(booking, bookingLog, payment),
             },

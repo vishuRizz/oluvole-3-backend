@@ -15,9 +15,37 @@ const nanoid = async () => (await import('nanoid')).nanoid;
 const crypto = require('crypto');
 const Guest = require('../models/guest.schema');
 const { processGuestVisit } = require('../utils/guestManager');
+const { deductVoucherBalance } = require('../utils/voucherWallet');
 
 // Replace with your Squad secret key
 const SQUAD_SECRET = process.env.SQUAD_SECRET || 'YOUR_SQUAD_SECRET';
+
+const isSuccessfulPaymentStatus = (status) => {
+  const normalized = String(status || '').toLowerCase();
+  return normalized === 'success' || normalized === 'confirmed';
+};
+
+const applyVoucherDeductionForPayment = async (paymentDoc) => {
+  if (!paymentDoc || paymentDoc.voucherDeducted) return;
+  if (!isSuccessfulPaymentStatus(paymentDoc.status)) return;
+
+  const voucherUsed = Number(paymentDoc.voucher || 0);
+  const voucherCode = String(paymentDoc.voucherCode || '').trim();
+  if (voucherUsed <= 0 || !voucherCode) return;
+
+  const deductionResult = await deductVoucherBalance({
+    voucherCode,
+    voucherUsed,
+  });
+
+  if (deductionResult.deducted) {
+    paymentDoc.voucherDeducted = true;
+    paymentDoc.voucherDeductedAmount = Number(
+      deductionResult.deductedAmount || voucherUsed
+    );
+    await paymentDoc.save();
+  }
+};
 
 // Payments
 /**
@@ -256,6 +284,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
         roomsDiscount: cBreakDown.RoomsDiscount || cBreakDown.roomsDiscount || '',
         discountApplied: cBreakDown.DiscountApplied || cBreakDown.discountApplied || '',
         voucherApplied: cBreakDown.VoucherApplied || cBreakDown.voucherApplied || '',
+        voucherCode: cBreakDown.VoucherCode || cBreakDown.voucherCode || '',
         priceAfterVoucher: cBreakDown.PriceAfterVoucher || cBreakDown.priceAfterVoucher || '',
         priceAfterDiscount: cBreakDown.PriceAfterDiscount || cBreakDown.priceAfterDiscount || '',
       };
@@ -343,9 +372,11 @@ async function verifyTransaction(reference, bookingDetails = null) {
           payment.roomsDiscount = bookingDetails.roomsDiscount || '';
           payment.discountApplied = bookingDetails.discountApplied || '';
           payment.voucherApplied = bookingDetails.voucherApplied || '';
+          payment.voucherCode = bookingDetails.voucherCode || '';
           payment.priceAfterVoucher = bookingDetails.priceAfterVoucher || '';
           payment.priceAfterDiscount = bookingDetails.priceAfterDiscount || '';
           paymentRecord = await payment.save();
+          await applyVoucherDeductionForPayment(paymentRecord);
         } else {
           paymentRecord = payment = await Payment.create({
             name: bookingDetails.name || '',
@@ -372,9 +403,11 @@ async function verifyTransaction(reference, bookingDetails = null) {
             roomsDiscount: bookingDetails.roomsDiscount || '',
             discountApplied: bookingDetails.discountApplied || '',
             voucherApplied: bookingDetails.voucherApplied || '',
+            voucherCode: bookingDetails.voucherCode || '',
             priceAfterVoucher: bookingDetails.priceAfterVoucher || '',
             priceAfterDiscount: bookingDetails.priceAfterDiscount || '',
           });
+          await applyVoucherDeductionForPayment(paymentRecord);
         }
         if (!paymentRecord) {
           console.error(
@@ -1031,6 +1064,7 @@ const handleSquadWebhook = async (req, res) => {
       roomsDiscount: costBreakDown.RoomsDiscount || '',
       discountApplied: costBreakDown.DiscountApplied || '',
       voucherApplied: costBreakDown.VoucherApplied || '',
+      voucherCode: costBreakDown.VoucherCode || costBreakDown.voucherCode || '',
       priceAfterVoucher: costBreakDown.PriceAfterVoucher || '',
       priceAfterDiscount: costBreakDown.PriceAfterDiscount || '',
     };

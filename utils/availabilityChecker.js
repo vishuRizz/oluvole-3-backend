@@ -2,8 +2,19 @@ const { overnightBooking } = require('../models/overnight.booking.schema');
 const BlockedRoom = require('../models/blockedRoom.schema');
 const logger = require('./logger');
 
-async function checkRoomAvailability(roomIds, startDate, endDate) {
+const parseBookingDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return new Date(value);
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(value);
+};
+
+async function checkRoomAvailability(roomIds, startDate, endDate, options = {}) {
   try {
+    const { excludeBookingRef } = options;
     if (!roomIds || roomIds.length === 0) {
       return {
         available: false,
@@ -20,8 +31,21 @@ async function checkRoomAvailability(roomIds, startDate, endDate) {
       };
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = parseBookingDate(startDate);
+    const end = parseBookingDate(endDate);
+
+    if (
+      !start ||
+      !end ||
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime())
+    ) {
+      return {
+        available: false,
+        conflicts: [],
+        message: 'Invalid start/end date for availability check',
+      };
+    }
 
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
@@ -78,9 +102,16 @@ async function checkRoomAvailability(roomIds, startDate, endDate) {
         }
       }
 
-      const existingBookings = await overnightBooking.find({
+      const bookingQuery = {
         'bookingDetails.selectedRooms.id': roomId,
-      });
+        status: { $ne: 'Cancelled' },
+      };
+
+      if (excludeBookingRef) {
+        bookingQuery.shortId = { $ne: excludeBookingRef };
+      }
+
+      const existingBookings = await overnightBooking.find(bookingQuery);
 
       for (const booking of existingBookings) {
         const bookingDetails = booking.bookingDetails;
@@ -166,7 +197,7 @@ async function checkRoomAvailability(roomIds, startDate, endDate) {
   }
 }
 
-async function checkMultiNightAvailability(multiNightSelections) {
+async function checkMultiNightAvailability(multiNightSelections, options = {}) {
   try {
     if (
       !multiNightSelections ||
@@ -188,7 +219,12 @@ async function checkMultiNightAvailability(multiNightSelections) {
 
       const roomIds = selections.map((s) => s.roomId);
 
-      const result = await checkRoomAvailability(roomIds, date, nextDay);
+      const result = await checkRoomAvailability(
+        roomIds,
+        date,
+        nextDay,
+        options
+      );
 
       if (!result.available) {
         allConflicts.push(...result.conflicts);
