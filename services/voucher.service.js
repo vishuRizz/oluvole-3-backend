@@ -5,9 +5,21 @@ const {
   asyncErrorHandler,
 } = require("../middlewares/error/error");
 const { paginate } = require("../utils/paginate");
+const escapeRegex = (text = "") =>
+  String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const createVoucher = asyncErrorHandler(async (req, res) => {
-  let staffInfo = await voucherModel.create(req.body);
+  const payload = {
+    ...req.body,
+    code: String(req.body.code || "").trim().toUpperCase(),
+    amount: Number(req.body.amount || 0),
+    balance:
+      req.body.balance === undefined || req.body.balance === null || req.body.balance === ""
+        ? Number(req.body.amount || 0)
+        : Number(req.body.balance),
+  };
+
+  let staffInfo = await voucherModel.create(payload);
   if (!staffInfo) {
     throw new ErrorResponse("Failed To Create Voucher", statusCode.badRequest);
   }
@@ -39,10 +51,17 @@ const deleteVoucher = asyncErrorHandler(async (req, res) => {
 });
 
 const validateVoucher = asyncErrorHandler(async (req, res) => {
-  const { code, price } = req.body;
-  let voucher = await voucherModel.findOne({ code });
+  const code = String(req.body.code || "").trim().toUpperCase();
+  const price = Number(req.body.price || 0);
+  let voucher = await voucherModel.findOne({
+    code: { $regex: `^${escapeRegex(code)}$`, $options: "i" },
+  });
   if (!voucher) {
     throw new ErrorResponse("Invalid Voucher Code", statusCode.notFound);
+  } else if (voucher.status && String(voucher.status).toLowerCase() !== "active") {
+    throw new ErrorResponse("Voucher is not active", statusCode.badRequest);
+  } else if (new Date(voucher.startsAt) > new Date()) {
+    throw new ErrorResponse("Voucher is not valid yet", statusCode.badRequest);
   } else if (new Date(voucher.expireAt) < new Date()) {
     throw new ErrorResponse("Voucher has expired", statusCode.badRequest);
   } else if (voucher.balance <= 0) {
@@ -62,9 +81,11 @@ const validateVoucher = asyncErrorHandler(async (req, res) => {
       remainingBalance = 0;
     }
 
-    voucher.balance = remainingBalance;
-    await voucher.save();
-    res.status(200).json({ voucher, newPrice });
+    res.status(200).json({
+      voucher,
+      newPrice,
+      remainingBalance,
+    });
   }
 });
 

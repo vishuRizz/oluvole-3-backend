@@ -14,6 +14,7 @@ const { overnightBooking, daypassBooking } = require('../models/overnight.bookin
 const BookingLogger = require('../services/bookingLogger.service');
 const Guest = require('../models/guest.schema');
 const { processGuestVisit } = require('../utils/guestManager');
+const { deductVoucherBalance } = require('../utils/voucherWallet');
 const {
   checkRoomAvailability,
   checkMultiNightAvailability,
@@ -76,6 +77,33 @@ const counting = (guestCount) => {
   };
 };
 
+const isSuccessfulPaymentStatus = (status) => {
+  const normalized = String(status || '').toLowerCase();
+  return normalized === 'success' || normalized === 'confirmed';
+};
+
+const applyVoucherDeductionForPayment = async (paymentDoc) => {
+  if (!paymentDoc || paymentDoc.voucherDeducted) return;
+  if (!isSuccessfulPaymentStatus(paymentDoc.status)) return;
+
+  const voucherUsed = Number(paymentDoc.voucher || 0);
+  const voucherCode = String(paymentDoc.voucherCode || '').trim();
+  if (voucherUsed <= 0 || !voucherCode) return;
+
+  const deductionResult = await deductVoucherBalance({
+    voucherCode,
+    voucherUsed,
+  });
+
+  if (deductionResult.deducted) {
+    paymentDoc.voucherDeducted = true;
+    paymentDoc.voucherDeductedAmount = Number(
+      deductionResult.deductedAmount || voucherUsed
+    );
+    await paymentDoc.save();
+  }
+};
+
 const create = asyncErrorHandler(async (req, res) => {
   let createDaypass;
   try {
@@ -96,7 +124,8 @@ const create = asyncErrorHandler(async (req, res) => {
 
     if (roomDetails.multiNightSelections) {
       availabilityCheck = await checkMultiNightAvailability(
-        roomDetails.multiNightSelections
+        roomDetails.multiNightSelections,
+        { excludeBookingRef: req.body.ref }
       );
     } else if (
       roomDetails.selectedRooms &&
@@ -107,7 +136,8 @@ const create = asyncErrorHandler(async (req, res) => {
       availabilityCheck = await checkRoomAvailability(
         roomIds,
         roomDetails.visitDate,
-        roomDetails.endDate
+        roomDetails.endDate,
+        { excludeBookingRef: req.body.ref }
       );
     }
 
@@ -144,10 +174,14 @@ const create = asyncErrorHandler(async (req, res) => {
       throw new ErrorResponse('Failed To Create Payment', 404);
     }
 
+    await applyVoucherDeductionForPayment(createDaypass);
+
+    const bookingRef = req.body.ref || createDaypass.ref || String(createDaypass._id);
+
     // Create booking log for successful payment
     try {
       await BookingLogger.logBookingAttempt({
-        bookingId: createDaypass._id,
+        bookingId: bookingRef,
         userId: guestDetails.email,
         status: 'success', // Assuming payment success means booking attempt is successful
         paymentStatus: 'success',
@@ -161,7 +195,7 @@ const create = asyncErrorHandler(async (req, res) => {
         userAgent: req.get('User-Agent') || 'Unknown',
       });
       logger.info('Successful payment booking log created', {
-        bookingId: req.body.ref || createDaypass._id,
+        bookingId: bookingRef,
       });
     } catch (bookingLogError) {
       logger.error('Failed to create successful payment booking log', {
@@ -171,7 +205,7 @@ const create = asyncErrorHandler(async (req, res) => {
       // Log payment success but booking failure using the dedicated service
       try {
         await BookingLogger.logPaymentSuccessBookingFailure(
-          createDaypass,
+          { ...createDaypass.toObject(), bookingId: bookingRef },
           bookingLogError
         );
         logger.info('Logged payment success, booking failed', {
@@ -504,6 +538,7 @@ const confirm = asyncErrorHandler(async (req, res) => {
     payment.status = 'Success'; // Update the status to confirm
     payment.method = `Bank Transfer ${bank}`;
     await payment.save();
+    await applyVoucherDeductionForPayment(payment);
 
     // Also update corresponding overnight booking status if it exists
     try {
@@ -842,6 +877,7 @@ const updatePayment = asyncErrorHandler(async (req, res) => {
   Object.assign(payment, req.body);
 
   await payment.save();
+  await applyVoucherDeductionForPayment(payment);
   res.status(200).json(payment);
 
   // Auto-create or update guest record when status is changed to Success

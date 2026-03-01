@@ -1,12 +1,19 @@
 const { dayPassDiscountModel } = require("../models");
 const { statusCode } = require("../utils/statusCode");
+const escapeRegex = (text = "") =>
+  String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const normalizeCode = (value = "") => String(value).trim().toUpperCase();
 const {
   ErrorResponse,
   asyncErrorHandler,
 } = require("../middlewares/error/error");
 
 const createDiscount = asyncErrorHandler(async (req, res) => {
-  let staffInfo = await dayPassDiscountModel.create(req.body);
+  const payload = {
+    ...req.body,
+    code: normalizeCode(req.body.code || ""),
+  };
+  let staffInfo = await dayPassDiscountModel.create(payload);
   res.status(200).json(staffInfo);
 });
 
@@ -30,8 +37,15 @@ const deleteDiscount = asyncErrorHandler(async (req, res) => {
   }
 });
 const validateDiscount = asyncErrorHandler(async (req, res) => {
-  const { code } = req.body;
-  let discount = await dayPassDiscountModel.findOne({ code });
+  const code = normalizeCode(req.body.code || "");
+  let discount = await dayPassDiscountModel.findOne({
+    code: { $regex: `^${escapeRegex(code)}$`, $options: "i" },
+  });
+  if (!discount) {
+    // Fallback for legacy records with accidental whitespace casing issues
+    const allDiscounts = await dayPassDiscountModel.find({ code: { $exists: true, $ne: null } });
+    discount = allDiscounts.find((item) => normalizeCode(item.code) === code) || null;
+  }
   if (!discount) {
     throw new ErrorResponse("Invalid Discount Code", statusCode.notFound);
   } else if (new Date(discount.expires) < new Date()) {
