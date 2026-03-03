@@ -103,7 +103,10 @@ async function checkRoomAvailability(roomIds, startDate, endDate, options = {}) 
       }
 
       const bookingQuery = {
-        'bookingDetails.selectedRooms.id': roomId,
+        $or: [
+          { 'bookingDetails.selectedRooms.id': roomId },
+          { 'bookingDetails.roomAssignments.roomId': roomId },
+        ],
         status: { $ne: 'Cancelled' },
       };
 
@@ -130,17 +133,20 @@ async function checkRoomAvailability(roomIds, startDate, endDate, options = {}) 
           const roomInfo = bookingDetails.selectedRooms?.find(
             (r) => r.id === roomId
           );
+          const assignmentInfo = bookingDetails.roomAssignments?.find(
+            (a) => a.roomId === roomId
+          );
           conflicts.push({
             type: 'existing_booking',
             roomId: roomId,
-            roomTitle: roomInfo?.title || 'Unknown Room',
+            roomTitle: roomInfo?.title || assignmentInfo?.roomDetails?.title || 'Unknown Room',
             bookingRef: booking.shortId,
             existingStart: existingStart.toISOString().split('T')[0],
             existingEnd: existingEnd.toISOString().split('T')[0],
             guestName:
               booking.guestDetails?.firstname +
-                ' ' +
-                booking.guestDetails?.lastname || 'N/A',
+              ' ' +
+              booking.guestDetails?.lastname || 'N/A',
             details: booking,
           });
         }

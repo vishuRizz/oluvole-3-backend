@@ -8,11 +8,7 @@ const logger = require("../utils/logger");
 
 const getAllBlockedRooms = asyncErrorHandler(async (req, res) => {
   const seasonalDates = await BlockedRoom.find({});
-  if (seasonalDates.length > 0) {
-    res.status(200).json(seasonalDates);
-  } else {
-    throw new ErrorResponse("No Blocked Room found", 404);
-  }
+  res.status(200).json(seasonalDates);
 });
 
 const createBlockedRoom = asyncErrorHandler(async (req, res) => {
@@ -40,7 +36,7 @@ const createBlockedRoom = asyncErrorHandler(async (req, res) => {
     guestPaymentMethod: guestPaymentMethod || ''
   };
 
-  if(description === 'Guest Booking (Manual)'){
+  if (description === 'Guest Booking (Manual)') {
     try {
       const emailContext = {
         name: guestName,

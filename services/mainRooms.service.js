@@ -70,9 +70,10 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
   const startDateString = startingDate.toISOString().split('T')[0];
   const endDateString = endingDate.toISOString().split('T')[0];
 
-  const [bookings, blockedRooms, allRooms, allPayments] = await Promise.all([
+  const [bookings] = await Promise.all([
     overnightBooking
       .find({
+        status: { $ne: 'Cancelled' },
         $or: [
           {
             'bookingDetails.visitDate': { $lte: endDateString },
@@ -87,15 +88,25 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
         ],
       })
       .lean()
-      .select('shortId bookingDetails'),
+      .select('shortId bookingDetails status'),
+  ]);
+
+  // Widen blocked room query by 1 day on each side to handle timezone offsets
+  // (e.g. browser in UTC+1 stores March 13 midnight local as 2026-03-12T23:00:00Z)
+  const blockedQueryStart = new Date(startingDate);
+  blockedQueryStart.setDate(blockedQueryStart.getDate() - 1);
+  const blockedQueryEnd = new Date(endingDate);
+  blockedQueryEnd.setDate(blockedQueryEnd.getDate() + 1);
+
+  const [blockedRooms, allRooms, allPayments] = await Promise.all([
     BlockedRoom.find({
       date: {
-        $gte: startingDate,
-        $lt: endingDate,
+        $gte: blockedQueryStart,
+        $lt: blockedQueryEnd,
       },
     })
       .lean()
-      .select('roomId date'),
+      .select('roomId date description'),
     SubRooms.find({}).populate('roomId').lean(),
     paymentModel.find({}).lean().select('ref status'),
   ]);
@@ -246,21 +257,36 @@ const getAllSubRoom2 = asyncErrorHandler(async (req, res) => {
     }
   }
 
+  // Process blocked rooms — normalize dates to date-only strings to handle timezone offsets
   console.log(`🔒 Processing ${blockedRooms.length} blocked room entries`);
   for (const blockedRoom of blockedRooms) {
     const roomId = blockedRoom.roomId.toString();
     const blockedDate = new Date(blockedRoom.date);
 
-    if (!roomOccupancyMap.has(roomId)) {
-      roomOccupancyMap.set(roomId, new Set());
-    }
+    // Normalize the blocked date to the correct calendar date.
+    // Blocked dates are stored from the browser at midnight LOCAL time, but
+    // toISOString() converts to UTC. For UTC+1 (Nigeria), March 13 midnight local
+    // becomes 2026-03-12T23:00:00Z, and .split('T')[0] would give "2026-03-12" (wrong!).
+    // Adding 12 hours before extracting ensures we round to the correct calendar date.
+    const adjusted = new Date(blockedDate.getTime() + 12 * 60 * 60 * 1000);
+    const dateString = adjusted.toISOString().split('T')[0];
 
-    const dateString = blockedDate.toISOString().split('T')[0];
-    roomOccupancyMap.get(roomId).add(dateString);
-    console.log(
-      `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'
-      })`
-    );
+    // Only include if the date falls within the actual requested range
+    if (dateString >= startDateString && dateString < endDateString) {
+      if (!roomOccupancyMap.has(roomId)) {
+        roomOccupancyMap.set(roomId, new Set());
+      }
+
+      roomOccupancyMap.get(roomId).add(dateString);
+      console.log(
+        `  🔒 Blocked: Room ${roomId} on ${dateString} (Reason: ${blockedRoom.description || 'N/A'
+        })`
+      );
+    } else {
+      console.log(
+        `  ⏭️ Skipped blocked room ${roomId} on ${dateString} (outside range ${startDateString} to ${endDateString})`
+      );
+    }
   }
 
   const numberOfNights = Math.ceil(
@@ -356,7 +382,11 @@ const getBookingsForRoom = asyncErrorHandler(async (req, res) => {
   const { roomId } = req.params;
   const bookings = await overnightBooking
     .find({
-      'bookingDetails.selectedRooms.id': roomId,
+      $or: [
+        { 'bookingDetails.selectedRooms.id': roomId },
+        { 'bookingDetails.roomAssignments.roomId': roomId },
+      ],
+      status: { $ne: 'Cancelled' },
     })
     .lean();
 
