@@ -35,7 +35,12 @@ router.get('/all-booking-logs', async (req, res) => {
 // Get paginated booking logs
 router.get('/paginated', async (req, res) => {
     try {
-        const result = await BookingLogger.getPaginatedBookingLogs(req.query.page, req.query.limit);
+        const result = await BookingLogger.getPaginatedBookingLogs(
+            req.query.page,
+            req.query.limit,
+            req.query.filter,
+            req.query.timeRange
+        );
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });

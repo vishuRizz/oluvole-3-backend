@@ -152,18 +152,46 @@ class BookingLogger {
 
     // ─── Get all booking logs ───
     static async getAllBookingLogs() {
+
         return BookingLog.find().sort({ timestamp: -1 });
     }
 
     // ─── Get paginated booking logs ───
-    static async getPaginatedBookingLogs(page = 1, limit = 10) {
+    static async getPaginatedBookingLogs(page = 1, limit = 10, filter = 'all', timeRange = null) {
         page = Math.max(parseInt(page) || 1, 1);
         limit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
         const skip = (page - 1) * limit;
 
+        // Build query based on filter
+        const query = {};
+
+        // Status filter
+        if (filter === 'successful') {
+            // paymentStatus success but exclude any cancelled bookings
+            query.paymentStatus = 'success';
+            query.status = { $nin: ['cancelled_by_admin', 'cancelled'] };
+        } else if (filter === 'pending') {
+            query.paymentStatus = 'pending';
+        } else if (filter === 'cancelled') {
+            // Match both 'cancelled_by_admin' and 'cancelled' status values
+            query.status = { $in: ['cancelled_by_admin', 'cancelled'] };
+        }
+        // 'all' = no status filter
+
+        // Time range filter
+        if (timeRange === 'weekly') {
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            query.timestamp = { $gte: weekAgo };
+        } else if (timeRange === 'monthly') {
+            const monthAgo = new Date();
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            query.timestamp = { $gte: monthAgo };
+        }
+
         const [data, total] = await Promise.all([
-            BookingLog.find().sort({ timestamp: -1 }).skip(skip).limit(limit),
-            BookingLog.countDocuments(),
+            BookingLog.find(query).sort({ timestamp: -1 }).skip(skip).limit(limit),
+            BookingLog.countDocuments(query),
         ]);
 
         const normalizedData = await Promise.all(
@@ -210,7 +238,7 @@ class BookingLogger {
     }
 
     // ─── Check-out (with survey email) ───
-        static async checkOutBooking(id) {
+    static async checkOutBooking(id) {
         const logEntry = await BookingLog.findByIdAndUpdate(
             id,
             {
@@ -257,7 +285,7 @@ class BookingLogger {
     }
 
     // ─── Cancel booking ───
-        static async cancelBooking(bookingRef) {
+    static async cancelBooking(bookingRef) {
         let booking = await overnightBooking.findOne({ shortId: bookingRef });
         let bookingType = 'overnight';
 

@@ -25,6 +25,14 @@ const isSuccessfulPaymentStatus = (status) => {
   return normalized === 'success' || normalized === 'confirmed';
 };
 
+const normalizeSquadPaymentStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  // Treat gateway "abandoned" as internal pending for follow-up/retry handling.
+  if (normalized === 'abandoned') return 'pending';
+  return normalized;
+};
+
 const applyVoucherDeductionForPayment = async (paymentDoc) => {
   if (!paymentDoc || paymentDoc.voucherDeducted) return;
   if (!isSuccessfulPaymentStatus(paymentDoc.status)) return;
@@ -304,7 +312,12 @@ async function verifyTransaction(reference, bookingDetails = null) {
     const transactionAmount = transactionData?.transaction_amount
       ? Number(transactionData.transaction_amount) / 100
       : 0;
-    let paymentStatus = transactionData?.transaction_status || 'unknown';
+    const rawPaymentStatus = transactionData?.transaction_status || 'unknown';
+    const paymentStatus = normalizeSquadPaymentStatus(rawPaymentStatus);
+    const paymentStatusDb =
+      paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
+    const bookingRecordStatus =
+      paymentStatus === 'success' ? 'Confirmed' : 'Pending';
     let paymentRecord = null;
     let hasConflict = false;
 
@@ -349,8 +362,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
         if (payment) {
           payment.name = bookingDetails.name || '';
           payment.amount = transactionAmount;
-          payment.status =
-            paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
+          payment.status = paymentStatusDb;
           payment.ref = reference;
           payment.method = 'Squad';
           payment.guestDetails = JSON.stringify(guestDetails);
@@ -381,8 +393,7 @@ async function verifyTransaction(reference, bookingDetails = null) {
           paymentRecord = payment = await Payment.create({
             name: bookingDetails.name || '',
             amount: transactionAmount,
-            status:
-              paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1),
+            status: paymentStatusDb,
             ref: reference,
             method: 'Squad',
             guestDetails: JSON.stringify(guestDetails),
@@ -420,105 +431,107 @@ async function verifyTransaction(reference, bookingDetails = null) {
             // Already parsed roomDetails and guestDetails above
             // Check if it's an overnight booking (has visitDate)
             if (roomDetails?.visitDate) {
-              let availabilityCheck;
+              if (paymentStatus === 'success') {
+                let availabilityCheck;
 
-              if (roomDetails.multiNightSelections) {
-                availabilityCheck = await checkMultiNightAvailability(
-                  roomDetails.multiNightSelections
-                );
-              } else if (
-                roomDetails.selectedRooms &&
-                roomDetails.visitDate &&
-                roomDetails.endDate
-              ) {
-                const roomIds = roomDetails.selectedRooms.map(
-                  (room) => room.id
-                );
-                availabilityCheck = await checkRoomAvailability(
-                  roomIds,
-                  roomDetails.visitDate,
-                  roomDetails.endDate
-                );
-              }
-
-              if (availabilityCheck && !availabilityCheck.available) {
-                hasConflict = true;
-                console.error(
-                  '❌ SQUAD: Payment successful but rooms are not available - CONFLICT DETECTED!',
-                  {
-                    reference,
-                    conflicts: availabilityCheck.conflicts,
-                    message: availabilityCheck.message,
-                  }
-                );
-
-                await BookingLogger.logBookingAttempt({
-                  bookingId: reference,
-                  userId: bookingDetails?.email || 'Unknown',
-                  status: 'failed',
-                  paymentStatus: 'success',
-                  paymentGateway: 'Squad',
-                  paymentId: reference,
-                  amount: transactionAmount,
-                  currency:
-                    response.data?.data?.transaction_currency_id || 'N/A',
-                  errorDetails: {
-                    errorMessage:
-                      'DOUBLE BOOKING PREVENTED: Payment successful but rooms unavailable',
-                    conflicts: availabilityCheck.conflicts,
-                  },
-                  bookingDetails: bookingDetails || { reference },
-                  requestPayload: { reference },
-                  responsePayload: response.data,
-                  ipAddress: 'Unknown',
-                  userAgent: 'Unknown',
-                });
-
-                try {
-                  await sendEmail(
-                    'bookings@jarabeachresort.com',
-                    'URGENT: Double Booking Prevented - Payment Refund Required',
-                    'confirmation',
-                    {
-                      name: 'Admin',
-                      email: guestDetails.email || 'Unknown',
-                      id: reference,
-                      bookingType: 'CONFLICT DETECTED',
-                      checkIn: availabilityCheck.message,
-                      checkOut: '',
-                      numberOfGuests: '',
-                      numberOfNights: '',
-                      extras: JSON.stringify(
-                        availabilityCheck.conflicts,
-                        null,
-                        2
-                      ),
-                      subTotal: '',
-                      multiNightDiscount: '',
-                      clubMemberDiscount: '',
-                      multiNightDiscountAvailable: '',
-                      vat: '',
-                      totalCost: transactionAmount,
-                      roomsPrice: '',
-                      extrasPrice: '',
-                      roomsDiscount: '',
-                      discountApplied: '',
-                      voucherApplied: '',
-                      priceAfterVoucher: '',
-                      priceAfterDiscount: '',
-                      totalGuests: '',
-                    }
+                if (roomDetails.multiNightSelections) {
+                  availabilityCheck = await checkMultiNightAvailability(
+                    roomDetails.multiNightSelections
                   );
-                } catch (alertEmailError) {
-                  console.error(
-                    'Failed to send alert email for double booking conflict:',
-                    alertEmailError
+                } else if (
+                  roomDetails.selectedRooms &&
+                  roomDetails.visitDate &&
+                  roomDetails.endDate
+                ) {
+                  const roomIds = roomDetails.selectedRooms.map(
+                    (room) => room.id
+                  );
+                  availabilityCheck = await checkRoomAvailability(
+                    roomIds,
+                    roomDetails.visitDate,
+                    roomDetails.endDate
                   );
                 }
 
-                throw new Error(
-                  `DOUBLE BOOKING PREVENTED: ${availabilityCheck.message}. Payment was successful (Ref: ${reference}) but booking cannot be created. URGENT: Manual refund required.`
-                );
+                if (availabilityCheck && !availabilityCheck.available) {
+                  hasConflict = true;
+                  console.error(
+                    '❌ SQUAD: Payment successful but rooms are not available - CONFLICT DETECTED!',
+                    {
+                      reference,
+                      conflicts: availabilityCheck.conflicts,
+                      message: availabilityCheck.message,
+                    }
+                  );
+
+                  await BookingLogger.logBookingAttempt({
+                    bookingId: reference,
+                    userId: bookingDetails?.email || 'Unknown',
+                    status: 'failed',
+                    paymentStatus: 'success',
+                    paymentGateway: 'Squad',
+                    paymentId: reference,
+                    amount: transactionAmount,
+                    currency:
+                      response.data?.data?.transaction_currency_id || 'N/A',
+                    errorDetails: {
+                      errorMessage:
+                        'DOUBLE BOOKING PREVENTED: Payment successful but rooms unavailable',
+                      conflicts: availabilityCheck.conflicts,
+                    },
+                    bookingDetails: bookingDetails || { reference },
+                    requestPayload: { reference },
+                    responsePayload: response.data,
+                    ipAddress: 'Unknown',
+                    userAgent: 'Unknown',
+                  });
+
+                  try {
+                    await sendEmail(
+                      'bookings@jarabeachresort.com',
+                      'URGENT: Double Booking Prevented - Payment Refund Required',
+                      'confirmation',
+                      {
+                        name: 'Admin',
+                        email: guestDetails.email || 'Unknown',
+                        id: reference,
+                        bookingType: 'CONFLICT DETECTED',
+                        checkIn: availabilityCheck.message,
+                        checkOut: '',
+                        numberOfGuests: '',
+                        numberOfNights: '',
+                        extras: JSON.stringify(
+                          availabilityCheck.conflicts,
+                          null,
+                          2
+                        ),
+                        subTotal: '',
+                        multiNightDiscount: '',
+                        clubMemberDiscount: '',
+                        multiNightDiscountAvailable: '',
+                        vat: '',
+                        totalCost: transactionAmount,
+                        roomsPrice: '',
+                        extrasPrice: '',
+                        roomsDiscount: '',
+                        discountApplied: '',
+                        voucherApplied: '',
+                        priceAfterVoucher: '',
+                        priceAfterDiscount: '',
+                        totalGuests: '',
+                      }
+                    );
+                  } catch (alertEmailError) {
+                    console.error(
+                      'Failed to send alert email for double booking conflict:',
+                      alertEmailError
+                    );
+                  }
+
+                  throw new Error(
+                    `DOUBLE BOOKING PREVENTED: ${availabilityCheck.message}. Payment was successful (Ref: ${reference}) but booking cannot be created. URGENT: Manual refund required.`
+                  );
+                }
               }
 
               const bookingData = {
@@ -526,12 +539,19 @@ async function verifyTransaction(reference, bookingDetails = null) {
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
-                status: 'Confirmed',
+                status: bookingRecordStatus,
               };
 
               // Check if booking already exists to prevent duplicate key error
               const existingBooking = await overnightBooking.findOne({ shortId: reference });
               if (existingBooking) {
+                if (
+                  paymentStatus === 'success' &&
+                  existingBooking.status !== 'Confirmed'
+                ) {
+                  existingBooking.status = 'Confirmed';
+                  await existingBooking.save();
+                }
                 console.log(
                   '✅ SQUAD: Overnight booking already exists for reference:',
                   reference,
@@ -555,13 +575,16 @@ async function verifyTransaction(reference, bookingDetails = null) {
                 bookingDetails: roomDetails,
                 guestDetails: guestDetails,
                 shortId: reference, // Use the same reference as payment
-                status: 'Confirmed',
+                status: bookingRecordStatus,
               };
 
               // Check if booking already exists to prevent duplicate key error
               const existingDaypass = await daypassBooking.findOne({ shortId: reference });
               if (existingDaypass) {
-                if (existingDaypass.status !== 'Confirmed') {
+                if (
+                  paymentStatus === 'success' &&
+                  existingDaypass.status !== 'Confirmed'
+                ) {
                   existingDaypass.status = 'Confirmed';
                   await existingDaypass.save();
                 }
@@ -880,18 +903,20 @@ async function verifyTransaction(reference, bookingDetails = null) {
           : 'N/A',
     };
     console.log('Email Context: ', emailContext);
-    try {
-      await sendEmail(
-        Body.email || 'unknown@unknown.com',
-        'Your Booking Is Confirmed',
-        'confirmation',
-        emailContext
-      );
-    } catch (emailError) {
-      console.error(
-        'Failed to send Squad payment confirmation emails:',
-        emailError
-      );
+    if (paymentStatus === 'success') {
+      try {
+        await sendEmail(
+          Body.email || 'unknown@unknown.com',
+          'Your Booking Is Confirmed',
+          'confirmation',
+          emailContext
+        );
+      } catch (emailError) {
+        console.error(
+          'Failed to send Squad payment confirmation emails:',
+          emailError
+        );
+      }
     }
 
     // Auto-create or update guest record for Squad payments

@@ -14,6 +14,22 @@ const Guest = require('../models/guest.schema');
 const { processGuestVisit } = require('../utils/guestManager');
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
+
+const getPublicBaseUrl = () =>
+  String(process.env.BASE_URL || '').replace(/\/+$/, '');
+
+const toAbsolutePhotoUrl = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const normalizedPath = trimmed.replace(/^\/+/, '');
+  const baseUrl = getPublicBaseUrl();
+  if (!baseUrl) return normalizedPath;
+  return `${baseUrl}/${normalizedPath}`;
+};
+
 const createBooking = asyncErrorHandler(async (req, res) => {
   try {
     let { guestCount, guestDetails, roomDetails, ref } = req.body;
@@ -158,7 +174,27 @@ const getAllBooking = asyncErrorHandler(async (req, res) => {
 const getPaginatedBookings = asyncErrorHandler(async (req, res) => {
   const { page, limit } = req.query;
   const result = await paginate(overnightBooking, {}, { page, limit });
-  res.status(200).json(result);
+  const dataWithAbsolutePhoto = Array.isArray(result.data)
+    ? result.data.map((bookingDoc) => {
+      const booking = bookingDoc?.toObject ? bookingDoc.toObject() : bookingDoc;
+      if (!booking?.guestDetails || typeof booking.guestDetails !== 'object') {
+        return booking;
+      }
+      const photo = toAbsolutePhotoUrl(booking.guestDetails.photo);
+      return {
+        ...booking,
+        guestDetails: {
+          ...booking.guestDetails,
+          photo,
+        },
+      };
+    })
+    : result.data;
+
+  res.status(200).json({
+    ...result,
+    data: dataWithAbsolutePhoto,
+  });
 });
 
 const getBookingByRef = asyncErrorHandler(async (req, res) => {
