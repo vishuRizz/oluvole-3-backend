@@ -18,6 +18,7 @@ const overNightBookingSchema = mongoose.Schema(
       enum: ["Pending", "Confirmed", "Checked In", "Checked Out", "Cancelled"],
       default: "Pending",
     },
+    idPhotoUrl: { type: String, default: "" },
   },
   { timestamps: true }
 );
@@ -36,6 +37,7 @@ const daypassBookingSchema = mongoose.Schema(
       enum: ["Pending", "Confirmed", "Checked In", "Checked Out", "Cancelled"],
       default: "Pending",
     },
+    idPhotoUrl: { type: String, default: "" },
   },
   { timestamps: true }
 );

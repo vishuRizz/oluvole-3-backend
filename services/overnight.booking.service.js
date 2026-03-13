@@ -12,6 +12,9 @@ const {
 } = require('../utils/availabilityChecker');
 const Guest = require('../models/guest.schema');
 const { processGuestVisit } = require('../utils/guestManager');
+const { uploadToCloudinary } = require('../config/cloudinary');
+const path = require('path');
+const fs = require('fs');
 // const shortid = require("shortid");
 // const { nanoid } = require("nanoid");
 
@@ -44,13 +47,43 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       throw new ErrorResponse('Invalid request', 400);
     }
     logger.info('Booking initiated', { email: guestDetails.email });
-    let fileUrl = file
-      ? `uploads/${file.filename}`
-      : (typeof guestDetails.photo === 'string' && guestDetails.photo) ||
-        (typeof guestDetails.file === 'string' && guestDetails.file !== 'ID ON FILE' ? guestDetails.file : null);
-    if (!fileUrl && guestDetails.email) {
-      const existingGuest = await Guest.findOne({ email: guestDetails.email }).select('photo');
-      fileUrl = existingGuest?.photo || null;
+
+    let fileUrl = null;
+
+    // 1) If a new file is uploaded, push it to Cloudinary
+    if (file) {
+      try {
+        const absolutePath = path.resolve(file.path || path.join('uploads', file.filename));
+        const uploadResult = await uploadToCloudinary(absolutePath, {
+          folder: 'jara-resort/guest-ids',
+        });
+        fileUrl = uploadResult.secure_url || uploadResult.url;
+
+        // Best effort: remove local temp file
+        fs.unlink(absolutePath, () => {});
+      } catch (cloudErr) {
+        logger.error('Cloudinary upload failed for overnight booking', {
+          error: cloudErr.message,
+          email: guestDetails.email,
+        });
+      }
+    }
+
+    // 2) Fallbacks if no fresh upload or Cloudinary failed
+    if (!fileUrl) {
+      if (typeof guestDetails.photo === 'string' && guestDetails.photo) {
+        fileUrl = guestDetails.photo;
+      } else if (
+        typeof guestDetails.file === 'string' &&
+        guestDetails.file !== 'ID ON FILE'
+      ) {
+        fileUrl = guestDetails.file;
+      } else if (guestDetails.email) {
+        const existingGuest = await Guest.findOne({
+          email: guestDetails.email,
+        }).select('photo');
+        fileUrl = existingGuest?.photo || null;
+      }
     }
     const updatedGuestDetails = {
       ...guestDetails,
@@ -134,6 +167,7 @@ const createBooking = asyncErrorHandler(async (req, res) => {
       guestDetails: updatedGuestDetails,
       shortId: shortIdToUse,
       status: req.body.status || 'Pending',
+      idPhotoUrl: fileUrl || '',
     });
 
     // Keep guest profile synced from booking data; don't increment visit count here.
