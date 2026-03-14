@@ -50,6 +50,9 @@ const newsletterRoute = require('./newsletter.router');
 // booking logs routes
 const bookingLogsRoutes = require('./bookingLogs.router');
 
+// pricing config route
+const pricingConfigRoute = require('./pricingConfig.router');
+
 allRoutes.use('/admin', accountRoute);
 allRoutes.use('/guest', guestRoute);
 allRoutes.use('/daypass', daypassRoute);
@@ -104,5 +107,8 @@ allRoutes.use('/survey', surveyRoute);
 
 // newsletter routes
 allRoutes.use('/newsletter', newsletterRoute);
+
+// pricing config routes
+allRoutes.use('/pricing-config', pricingConfigRoute);
 
 module.exports = { allRoutes };

@@ -2,6 +2,7 @@ const {
   asyncErrorHandler,
   ErrorResponse,
 } = require('../middlewares/error/error');
+const PricingConfig = require('../models/pricingConfig.schema');
 const logger = require('../utils/logger');
 const { paymentModel } = require('../models');
 const { loyaltyCoinModel } = require('../models/loyaltyPoints');
@@ -20,6 +21,13 @@ const {
   checkMultiNightAvailability,
 } = require('../utils/availabilityChecker');
 const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
+
+// Helper to get the singleton pricing config (uses defaults if not seeded yet)
+async function getPricingConfig() {
+  let cfg = await PricingConfig.findOne();
+  if (!cfg) cfg = await PricingConfig.create({});
+  return cfg;
+}
 
 function formatDate(dateString) {
   const date = new Date(dateString);
@@ -228,20 +236,24 @@ const create = asyncErrorHandler(async (req, res) => {
 
       const currentStatusCheck = (createDaypass.status || '').toLowerCase();
       if (['success', 'confirmed'].includes(currentStatusCheck)) {
-        // Loyalty logic
+        // Loyalty logic — rates from DB config
+        const cfg = await getPricingConfig();
+        const nairaPerPoint = cfg.loyaltyNairaPerPoint || 10000;
+        const redeemThreshold = cfg.loyaltyRedeemableThreshold || 50;
+
         let loyaltyRecord = await loyaltyCoinModel.findOne({ email });
         if (loyaltyRecord) {
           loyaltyRecord.totalSpent += Number(amount);
-          loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / 10000);
-          loyaltyRecord.redeemable = loyaltyRecord.points >= 50;
+          loyaltyRecord.points = Math.floor(loyaltyRecord.totalSpent / nairaPerPoint);
+          loyaltyRecord.redeemable = loyaltyRecord.points >= redeemThreshold;
           await loyaltyRecord.save();
         } else {
-          const points = Math.floor(amount / 10000);
+          const points = Math.floor(amount / nairaPerPoint);
           const newLoyalty = new loyaltyCoinModel({
             email,
             totalSpent: amount,
             points: points,
-            redeemable: points >= 50,
+            redeemable: points >= redeemThreshold,
           });
           await newLoyalty.save();
         }

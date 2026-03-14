@@ -15,8 +15,12 @@ const getAllSeasonal = asyncErrorHandler(async (req, res) => {
 });
 
 const createSeasonal = asyncErrorHandler(async (req, res) => {
-  const { date, description } = req.body;
-  const newSeasonalDate = new Seasonal({ date, description });
+  const { date, description, percentage } = req.body;
+  const newSeasonalDate = new Seasonal({
+    date,
+    description,
+    percentage: percentage ?? 0,
+  });
   await newSeasonalDate.save();
   if (newSeasonalDate) {
     AdminLogEvent(req.body.adminId,'None','Added New Seasonal Dates','Success',"Successfully Added New Seasonal Dates ("+newSeasonalDate.date+") ",newSeasonalDate._id)
@@ -28,11 +32,16 @@ const createSeasonal = asyncErrorHandler(async (req, res) => {
 
 const updateSeasonal = asyncErrorHandler(async (req, res) => {
   const { id } = req.params;
-  const { date, description } = req.body;
-  const seasonalDate = await Seasonal.findByIdAndUpdate(id, {
-    date,
-    description,
-  });
+  const { date, description, percentage } = req.body;
+  const seasonalDate = await Seasonal.findByIdAndUpdate(
+    id,
+    {
+      ...(date && { date }),
+      ...(description && { description }),
+      ...(percentage !== undefined && { percentage }),
+    },
+    { new: true }
+  );
   if (seasonalDate) {
     res.status(200).json(seasonalDate);
   } else {
