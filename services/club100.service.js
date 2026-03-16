@@ -68,18 +68,51 @@ const registerClubMember = asyncErrorHandler(async (req, res) => {
   }
 });
 
-// Validate a Club100 member
+// Validate a Club100 member and return tier-based discounts
 const validateClubMember = asyncErrorHandler(async (req, res) => {
   const { clubID, email } = req.body;
   const member = await clubModel.findOne({ clubID, email });
   if (!member) {
     throw new ErrorResponse("Club100 Member not found", 404);
   }
+
+  // Load loyalty spend and pricing config to determine tier dynamically
+  const { loyaltyCoinModel } = require("../models/loyaltyPoints");
+  const PricingConfig = require("../models/pricingConfig.schema");
+
+  const loyaltyRecord = await loyaltyCoinModel.findOne({ email });
+  const totalSpent = loyaltyRecord?.totalSpent || 0;
+
+  const config = (await PricingConfig.findOne()) || {};
+  const tiers = Array.isArray(config.membershipTiers)
+    ? config.membershipTiers
+    : [];
+
+  // Find matching tier by spend
+  let appliedTier = null;
+  for (const tier of tiers) {
+    const min = typeof tier.minSpend === "number" ? tier.minSpend : 0;
+    const max =
+      tier.maxSpend === null || tier.maxSpend === undefined
+        ? Number.POSITIVE_INFINITY
+        : tier.maxSpend;
+    if (totalSpent >= min && totalSpent <= max) {
+      appliedTier = tier;
+      break;
+    }
+  }
+
+  // Fallback if no tiers configured
+  const peakDiscount = appliedTier?.peakDiscount ?? 0;
+  const offPeakDiscount = appliedTier?.offPeakDiscount ?? 0;
+
   res.status(200).json({
     message: "Club100 Member validated successfully.",
+    tier: appliedTier?.name || "Standard",
+    totalSpent,
     percentage: {
-      peakDiscount: 10,
-      offPeakDiscount: 20,
+      peakDiscount,
+      offPeakDiscount,
     },
   });
 });

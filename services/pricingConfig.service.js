@@ -35,6 +35,7 @@ const updateConfig = asyncErrorHandler(async (req, res) => {
       "overnightInfantMultiplier",
       "overnightAdditionalGuestTiers",
       "overnightCouponDiscountPercent",
+      "membershipTiers",
     ];
     allowed.forEach((key) => {
       if (req.body[key] !== undefined) {

@@ -30,6 +30,44 @@ const pricingConfigSchema = mongoose.Schema(
     loyaltyNairaPerPoint: { type: Number, default: 10000 },   // ₦10,000 spend = 1 point
     loyaltyRedeemableThreshold: { type: Number, default: 50 }, // points needed to redeem
 
+    // ─── Membership tiers (spend-based discounts) ────────────────────────────
+    // Array of { name, minSpend, maxSpend, peakDiscount, offPeakDiscount }
+    // maxSpend can be null to mean "no upper limit".
+    membershipTiers: {
+      type: [
+        {
+          name: { type: String, required: true },
+          minSpend: { type: Number, required: true },
+          maxSpend: { type: Number, default: null },
+          peakDiscount: { type: Number, default: 0 },
+          offPeakDiscount: { type: Number, default: 0 },
+        },
+      ],
+      default: [
+        {
+          name: "Basic",
+          minSpend: 0,
+          maxSpend: 2000000,
+          peakDiscount: 0,
+          offPeakDiscount: 0,
+        },
+        {
+          name: "Azure",
+          minSpend: 2100000,
+          maxSpend: 5000000,
+          peakDiscount: 10,
+          offPeakDiscount: 15,
+        },
+        {
+          name: "Gold",
+          minSpend: 5100000,
+          maxSpend: null,
+          peakDiscount: 15,
+          offPeakDiscount: 20,
+        },
+      ],
+    },
+
     // ─── Overnight: Child / toddler / infant multipliers (0–1) ───────────────
     overnightChildMultiplier: { type: Number, default: 0.5 },   // child = 50% of adult
     overnightToddlerMultiplier: { type: Number, default: 0.25 }, // toddler = 25% of adult
