@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const Guest = require('../models/guest.schema');
 const { processGuestVisit } = require('../utils/guestManager');
 const { deductVoucherBalance } = require('../utils/voucherWallet');
+const { getOvernightAddonsForEmail } = require('../utils/overnightAddons');
 
 // Replace with your Squad secret key
 const SQUAD_SECRET = process.env.SQUAD_SECRET || 'YOUR_SQUAD_SECRET';
@@ -901,6 +902,12 @@ async function verifyTransaction(reference, bookingDetails = null) {
         : isValidNumber(bookingDetails.totalCost)
           ? formatPrice(bookingDetails.totalCost)
           : 'N/A',
+      ...getOvernightAddonsForEmail(roomDetails, {
+        discountApplied: costBreakDown.discountApplied,
+        multiNightDiscount: costBreakDown.multiNightDiscount || costBreakDown.multiNightDiscountAvailable,
+        voucherApplied: costBreakDown.voucherApplied,
+        voucher: costBreakDown.clubMemberDiscount || costBreakDown.clubDiscountApplied,
+      }),
     };
     console.log('Email Context: ', emailContext);
     if (paymentStatus === 'success') {

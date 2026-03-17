@@ -21,6 +21,7 @@ const {
   checkMultiNightAvailability,
 } = require('../utils/availabilityChecker');
 const { normalizeRoomDetails } = require('../utils/nightlyAssignments');
+const { getOvernightAddonsForEmail } = require('../utils/overnightAddons');
 
 // Helper to get the singleton pricing config (uses defaults if not seeded yet)
 async function getPricingConfig() {
@@ -66,6 +67,7 @@ const calculateNumberOfNights = (visitDate, endDate) => {
   // console.log(numberOfNights);
   return numberOfNights;
 };
+
 const counting = (guestCount) => {
   const numChildren = guestCount?.ages?.filter((age) =>
     age.includes('child')
@@ -342,6 +344,12 @@ const create = asyncErrorHandler(async (req, res) => {
         ? formatPrice(req.body.priceAfterDiscount)
         : formatPrice(req.body.subTotal),
       totalGuests: totalGuests,
+      ...getOvernightAddonsForEmail(roomDetails, {
+        discountApplied: req.body.discountApplied,
+        multiNightDiscount: req.body.multiNightDiscount,
+        voucherApplied: req.body.voucherApplied,
+        voucher: req.body.voucher,
+      }),
     };
 
     try {
@@ -701,6 +709,12 @@ const confirm = asyncErrorHandler(async (req, res) => {
         ? formatPrice(payment.priceAfterDiscount)
         : '',
       totalGuests: totalGuests,
+      ...getOvernightAddonsForEmail(roomDetails, {
+        discountApplied: payment.discountApplied,
+        multiNightDiscount: payment.multiNightDiscount,
+        voucherApplied: payment.voucherApplied,
+        voucher: payment.voucher,
+      }),
     };
     sendEmail(
       guestDetails.email,
